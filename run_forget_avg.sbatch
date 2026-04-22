@@ -5,8 +5,9 @@
 #SBATCH --mem-per-cpu=8G
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
+#SBATCH --constraint=avx2
 #SBATCH --mail-type=ALL
-#SBATCH --mail-user=YOUR_NETID@cornell.edu
+#SBATCH --mail-user=cjh337@cornell.edu
 #SBATCH --error=logs/%x_%j.err
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --get-user-env
