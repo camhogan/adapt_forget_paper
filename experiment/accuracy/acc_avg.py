@@ -175,6 +175,14 @@ for optimizer_name in optimizer_list:
     org_label_list_split, target_label_list_split = [], []  # original labels list, training target label list
     acc_train_avg_list, acc_train_min_list, acc_train_max_list = [], [], []
     acc_test_avg_list, acc_test_min_list, acc_test_max_list = [], [], []
+    n_label_cols = params['num_task'] * params['num_output_classes']
+    seed_detail_header = (
+        ['pick_index', 'seed']
+        + [f'orig_label_{k}' for k in range(n_label_cols)]
+        + [f'target_label_{k}' for k in range(n_label_cols)]
+        + ['train_avg', 'train_min', 'train_max', 'test_avg', 'test_min', 'test_max']
+    )
+    seed_detail_rows = [seed_detail_header]
 
     # accuracy calculation for num_pick sample points
     for i in range(params['num_pick']):
@@ -183,6 +191,8 @@ for optimizer_name in optimizer_list:
 
         # fixed target label mapping for fair optimizer comparison
         target_random_labels = scenarios[i]["target_random_labels"]
+        flat_org_labels = [int(v) for pair in np.array(group_labels).tolist() for v in pair]
+        flat_target_labels = [int(v) for pair in target_random_labels for v in pair]
         seed_train_avg_list, seed_train_min_list, seed_train_max_list = [], [], []
         seed_test_avg_list, seed_test_min_list, seed_test_max_list = [], [], []
 
@@ -228,6 +238,19 @@ for optimizer_name in optimizer_list:
             seed_test_avg_list.append(acc_test_avg)
             seed_test_min_list.append(jnp.min(jnp.array(acc_test_perm_list)))
             seed_test_max_list.append(jnp.max(jnp.array(acc_test_perm_list)))
+            seed_detail_rows.append(
+                [i, int(seed_value)]
+                + flat_org_labels
+                + flat_target_labels
+                + [
+                    float(acc_train_avg),
+                    float(jnp.min(jnp.array(acc_train_perm_list))),
+                    float(jnp.max(jnp.array(acc_train_perm_list))),
+                    float(acc_test_avg),
+                    float(jnp.min(jnp.array(acc_test_perm_list))),
+                    float(jnp.max(jnp.array(acc_test_perm_list))),
+                ]
+            )
 
         # train accuracy record
         acc_train_avg_list.append(float(np.mean(np.array(seed_train_avg_list))))
@@ -261,6 +284,19 @@ for optimizer_name in optimizer_list:
     with open(file_name + '.csv', mode="w", newline='') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerows(perm_avg_matrix)
+    # Additional seed-level breakdown CSV with average row at bottom.
+    metric_start = 2 + 2 * n_label_cols
+    metric_matrix = np.array([row[metric_start:] for row in seed_detail_rows[1:]], dtype=float)
+    metric_means = list(np.mean(metric_matrix, axis=0))
+    seed_detail_rows.append(['AVG', '-'] + [''] * (2 * n_label_cols) + metric_means)
+    seed_file_name = (
+        params['ds_type'] + '_' + params['nn_type'] + '_' + params['optimizer'] + '_' + 'P'
+        + str(params['num_task']) + '_C' + str(params['num_output_classes']) + '_perm_avg_seed_detail_index'
+        + str(params['num_index'])
+    )
+    with open(seed_file_name + '.csv', mode="w", newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerows(seed_detail_rows)
 
     opt_time = time.time() - opt_start
     summary_rows.append([

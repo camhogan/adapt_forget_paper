@@ -164,6 +164,14 @@ for optimizer_name in optimizer_list:
     # list initialization: label list, accuracy forgetted list
     org_label_list_split, target_label_list_split = [], []  # original labels list, training target label list
     acc_forget_list = []
+    n_label_cols = params['num_task'] * params['num_output_classes']
+    seed_detail_header = (
+        ['pick_index', 'seed']
+        + [f'orig_label_{k}' for k in range(n_label_cols)]
+        + [f'target_label_{k}' for k in range(n_label_cols)]
+        + ['forget_avg']
+    )
+    seed_detail_rows = [seed_detail_header]
 
     # forget calculation for num_pick sample points
     for i in range(params['num_pick']):
@@ -172,6 +180,8 @@ for optimizer_name in optimizer_list:
 
         # fixed target label mapping for fair optimizer comparison
         target_random_labels = scenarios[i]["target_random_labels"]
+        flat_org_labels = [int(v) for pair in np.array(group_labels).tolist() for v in pair]
+        flat_target_labels = [int(v) for pair in target_random_labels for v in pair]
         seed_forget_avg_list = []
         for seed_idx, seed_value in enumerate(seed_list):
             params['ini_seed'] = seed_value
@@ -206,6 +216,12 @@ for optimizer_name in optimizer_list:
                 acc_forget = contin_learn_forget(params, train_ds_list_ordered, test_ds_list_ordered, group_labels_ordered, target_random_labels_ordered)
                 acc_forget_avg += acc_forget / len(scenarios[i]["orders"])
             seed_forget_avg_list.append(acc_forget_avg)
+            seed_detail_rows.append(
+                [i, int(seed_value)]
+                + flat_org_labels
+                + flat_target_labels
+                + [float(acc_forget_avg)]
+            )
 
         # label list record
         org_label_list_split.append(group_labels)
@@ -231,6 +247,19 @@ for optimizer_name in optimizer_list:
     with open(file_name + '.csv', mode="w", newline='') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerows(perm_forget_avg_matrix)
+    # Additional seed-level breakdown CSV with average row at bottom.
+    metric_start = 2 + 2 * n_label_cols
+    metric_matrix = np.array([row[metric_start:] for row in seed_detail_rows[1:]], dtype=float)
+    metric_means = list(np.mean(metric_matrix, axis=0))
+    seed_detail_rows.append(['AVG', '-'] + [''] * (2 * n_label_cols) + metric_means)
+    seed_file_name = (
+        params['ds_type'] + '_' + params['nn_type'] + '_' + params['optimizer'] + '_' + 'P'
+        + str(params['num_task']) + '_C' + str(params['num_output_classes']) + '_forget_avg_seed_detail_index'
+        + str(params['num_index'])
+    )
+    with open(seed_file_name + '.csv', mode="w", newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerows(seed_detail_rows)
 
     opt_time = time.time() - opt_start
     summary_rows.append([optimizer_name, float(np.mean(np.array(acc_forget_list))), opt_time])
