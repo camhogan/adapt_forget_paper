@@ -1,12 +1,17 @@
-# Base requirements (CPU-safe) for development and analysis scripts.
-# For GPU training on Linux clusters, install one of:
+# Core pinned dependencies for adapt_forget_paper.
+# Use with one GPU overlay file below to select CUDA runtime:
 #   requirements-gpu-cuda12.txt
 #   requirements-gpu-cuda13.txt
-jax
-flax
-optax
-tensorflow-cpu
-tensorflow-datasets
-numpy
+
+tensorflow-cpu==2.21.0
+tensorflow-datasets==4.9.9
+flax==0.12.0
+optax==0.2.8
+orbax-checkpoint==0.11.36
+tensorstore>=0.1.74
+importlib_resources
+pandas
 scipy
 matplotlib
+tqdm
+einops

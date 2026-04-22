@@ -1,4 +1,4 @@
 -r requirements.txt
 
 # Linux NVIDIA GPU build of JAX with CUDA 13 runtime wheels.
-jax[cuda13]
+jax[cuda13]==0.6.2
