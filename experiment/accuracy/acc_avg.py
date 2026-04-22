@@ -70,7 +70,7 @@ main function running
 """
 Start = time.time()  # time record begin, not necessary
 # Load the CIFAR-10 dataset using tensorflow_datasets
-data_dir = '/tmp/tfds'
+data_dir = '/tmp/tfds_acc'
 train_ds, test_ds = ds_upload(data_dir, params['ds_type'])
 
 # list initialization: label list, train accuracy list and test accuracy list

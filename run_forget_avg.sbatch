@@ -24,4 +24,5 @@ conda activate adapt-forget
 # Run from repository root (directory from which sbatch is called).
 cd "${SLURM_SUBMIT_DIR}"
 
+export XLA_FLAGS="--xla_gpu_autotune_level=0 --xla_gpu_strict_conv_algorithm_picker=false"
 python -u experiment/forget/forget_avg.py
