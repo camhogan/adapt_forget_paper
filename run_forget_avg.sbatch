@@ -19,7 +19,7 @@ mkdir -p logs
 
 # Initialize conda in non-interactive shell and activate your env.
 source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate adapt-forget
+conda activate adapt-forget-clean-clean
 
 # Run from repository root (directory from which sbatch is called).
 cd "${SLURM_SUBMIT_DIR}"
