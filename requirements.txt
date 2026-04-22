@@ -1,0 +1,12 @@
+# Base requirements (CPU-safe) for development and analysis scripts.
+# For GPU training on Linux clusters, install one of:
+#   requirements-gpu-cuda12.txt
+#   requirements-gpu-cuda13.txt
+jax
+flax
+optax
+tensorflow-cpu
+tensorflow-datasets
+numpy
+scipy
+matplotlib

@@ -51,3 +51,32 @@ The following parameters are used in this machine learning model:
 | `loss_function`    | Loss function used to train the model.       | `CrossEntropy`|
 | `shuffle_size`     | Size of the buffer used for shuffling the dataset.| `1000`       |
 
+## GPU Cluster Setup (SLURM)
+
+Use Python 3.11 in a conda environment:
+
+```bash
+conda create -n adapt-forget python=3.11 -y
+conda activate adapt-forget
+python -m pip install --upgrade pip setuptools wheel
+```
+
+Install dependencies for NVIDIA GPU on Linux:
+
+```bash
+# choose one of these based on your cluster
+pip install -r requirements-gpu-cuda12.txt
+# or
+pip install -r requirements-gpu-cuda13.txt
+```
+
+Quick verification before submitting jobs:
+
+```bash
+python - <<'PY'
+import jax
+import tensorflow as tf
+print("JAX devices:", jax.devices())
+print("TensorFlow:", tf.__version__)
+PY
+```

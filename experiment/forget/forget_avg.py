@@ -38,7 +38,7 @@ params = {
 
     # parameters for experiment setting
     'num_pick': 10,  # number of ways to randomly pick and group num_task*num_class classes from num_all_class
-    'num_perm': 30,  # number of multi-permutations for each sample point: 6, 30, 50 for P = 3, 5, 7
+    'num_perm': 1,  # number of multi-permutations for each sample point: 6, 30, 50 for P = 3, 5, 7
     'num_index': 1,  # job index to submit, related to classes split and labels split
     'ini_seed': 0,  # initialized seed for model, set to constant
 }
