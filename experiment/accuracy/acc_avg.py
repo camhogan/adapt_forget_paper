@@ -153,17 +153,6 @@ for i in range(params['num_pick']):
         }
     )
 
-summary_rows = [[
-    "optimizer",
-    "train_avg_mean",
-    "train_min_mean",
-    "train_max_mean",
-    "test_avg_mean",
-    "test_min_mean",
-    "test_max_mean",
-    "run_time_sec",
-]]
-
 for optimizer_name in optimizer_list:
     params['optimizer'] = optimizer_name
     opt_start = time.time()
@@ -171,10 +160,6 @@ for optimizer_name in optimizer_list:
     base_ini_seed = params['ini_seed']
     seed_list = [base_ini_seed + s for s in range(params.get('num_seeds', 1))]
 
-    # list initialization: label list, train accuracy list and test accuracy list
-    org_label_list_split, target_label_list_split = [], []  # original labels list, training target label list
-    acc_train_avg_list, acc_train_min_list, acc_train_max_list = [], [], []
-    acc_test_avg_list, acc_test_min_list, acc_test_max_list = [], [], []
     n_label_cols = params['num_task'] * params['num_output_classes']
     seed_detail_header = (
         ['pick_index', 'seed']
@@ -252,38 +237,8 @@ for optimizer_name in optimizer_list:
                 ]
             )
 
-        # train accuracy record
-        acc_train_avg_list.append(float(np.mean(np.array(seed_train_avg_list))))
-        acc_train_min_list.append(float(np.mean(np.array(seed_train_min_list))))
-        acc_train_max_list.append(float(np.mean(np.array(seed_train_max_list))))
-        # test accuracy record
-        acc_test_avg_list.append(float(np.mean(np.array(seed_test_avg_list))))
-        acc_test_min_list.append(float(np.mean(np.array(seed_test_min_list))))
-        acc_test_max_list.append(float(np.mean(np.array(seed_test_max_list))))
-        # label list record
-        org_label_list_split.append(group_labels)
-        target_label_list_split.append(target_random_labels)
     params['ini_seed'] = base_ini_seed
 
-    # data save original classes label, random target label in training, train acc (avg, min, max), test acc (avg, min, max)
-    perm_avg_matrix = np.zeros((params['num_pick'], params['num_task']*params['num_output_classes']*2+3+3))
-    n_labels = params['num_task']*params['num_output_classes']*2  # number of labels in csv
-    for i in range(params['num_pick']):
-        # original classes label record
-        for j in range(params['num_task']):
-            for k in range(params['num_output_classes']):
-                perm_avg_matrix[i][j*params['num_output_classes']+k] = org_label_list_split[i][j][k]
-
-        # target randomly set label record
-        for j in range(params['num_task']):
-            for k in range(params['num_output_classes']):
-                perm_avg_matrix[i][params['num_task']*params['num_output_classes']+j*params['num_output_classes']+k] = target_label_list_split[i][j][k]
-        perm_avg_matrix[i][n_labels], perm_avg_matrix[i][n_labels+1], perm_avg_matrix[i][n_labels+2] = acc_train_avg_list[i], acc_train_min_list[i], acc_train_max_list[i]
-        perm_avg_matrix[i][n_labels+3], perm_avg_matrix[i][n_labels+4], perm_avg_matrix[i][n_labels+5] = acc_test_avg_list[i], acc_test_min_list[i], acc_test_max_list[i]
-    file_name = params['ds_type'] + '_' + params['nn_type'] + '_' + params['optimizer'] + '_' + 'P' + str(params['num_task']) + '_C' + str(params['num_output_classes']) + '_perm_avg_index' + str(params['num_index'])
-    with open(file_name + '.csv', mode="w", newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerows(perm_avg_matrix)
     # Additional seed-level breakdown CSV with average row at bottom.
     metric_start = 2 + 2 * n_label_cols
     metric_matrix = np.array([row[metric_start:] for row in seed_detail_rows[1:]], dtype=float)
@@ -299,21 +254,7 @@ for optimizer_name in optimizer_list:
         writer.writerows(seed_detail_rows)
 
     opt_time = time.time() - opt_start
-    summary_rows.append([
-        optimizer_name,
-        float(np.mean(np.array(acc_train_avg_list))),
-        float(np.mean(np.array(acc_train_min_list))),
-        float(np.mean(np.array(acc_train_max_list))),
-        float(np.mean(np.array(acc_test_avg_list))),
-        float(np.mean(np.array(acc_test_min_list))),
-        float(np.mean(np.array(acc_test_max_list))),
-        opt_time,
-    ])
-
-summary_name = params['ds_type'] + '_' + params['nn_type'] + '_P' + str(params['num_task']) + '_C' + str(params['num_output_classes']) + '_optimizer_compare_acc_index' + str(params['num_index']) + '.csv'
-with open(summary_name, mode="w", newline='') as csvfile:
-    writer = csv.writer(csvfile)
-    writer.writerows(summary_rows)
+    print(f'optimizer {optimizer_name} finished in {opt_time:.1f} sec')
 
 End = time.time()
 print("time cost:", End-Start)
