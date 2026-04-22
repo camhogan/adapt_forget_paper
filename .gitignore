@@ -1,0 +1,6 @@
+
+# local artifacts
+__pycache__/
+*.pyc
+*.bak
+logs/
