@@ -1,7 +1,6 @@
 import jax
 import numpy as np
 from flax.training import train_state
-import optax
 import tensorflow as tf
 import csv
 import time
@@ -15,7 +14,7 @@ sys.path.insert(0, parent_dir)
 from dataset_process import ds_upload, gen_ds_load, gen_ds_load_neg_ghg
 from file_extract import obtain_label_perm_avg, obtain_label_forget_avg
 from opt_order import all_perm_task3, random_perm_label, perm, ham_path_order, peri_core_order
-from continual_model import train_model, contin_learn_forget
+from continual_model import train_model, contin_learn_forget, build_optimizer
 from network import nn_index
 from similarity import sim_matrix_zero_shot, sim_matrix_neg_ghg, sim_mean
 
@@ -34,7 +33,23 @@ params = {
     'num_task': 5,  # number of tasks
     'num_output_classes': 2,  # num of output classes
     'num_all_classes': 10,  # num of total classes in dataset (ex. 100 for cifar100)
+    'optimizer': 'adam',  # optimizer: 'sgd', 'sgd_momentum', 'adam', 'adamw', 'rmsprop'
     'learning_rate': 0.001,  # learning rate
+    'sgd_momentum': 0.9,  # used by sgd_momentum
+    'sgd_nesterov': False,  # used by sgd_momentum
+    'adam_b1': 0.9,  # used by adam
+    'adam_b2': 0.999,  # used by adam
+    'adam_eps': 1e-8,  # used by adam
+    'adamw_b1': 0.9,  # used by adamw
+    'adamw_b2': 0.999,  # used by adamw
+    'adamw_eps': 1e-8,  # used by adamw
+    'adamw_weight_decay': 1e-4,  # used by adamw
+    'rmsprop_decay': 0.9,  # used by rmsprop
+    'rmsprop_eps': 1e-8,  # used by rmsprop
+    'rmsprop_initial_scale': 0.0,  # used by rmsprop
+    'rmsprop_centered': False,  # used by rmsprop
+    'rmsprop_momentum': 0.0,  # used by rmsprop
+    'rmsprop_nesterov': False,  # used by rmsprop
     'num_regular_epochs': 5,  # number of epochs per task during regular training
     'num_continue_epochs': 5,  # number of epochs per task during continue training
     'batch_size': 4,   # batch size
@@ -42,7 +57,7 @@ params = {
     'image_size': [32, 32, 3],  # size of image data, [28, 28] for grayscale image, [32, 32, 3] for colored ones
 
     # parameters for experiment setting
-    'path2avg': 'cifar10_cnn2_P5_C2_forget_avg_index1',  # path to csv file you keep the average forget performance
+    'path2avg': 'cifar10_cnn2_adam_P5_C2_forget_avg_index1',  # path to csv file you keep the average forget performance
     'num_index': 1,  # job index to submit, related to classes split and labels split
     'ini_seed': 0,  # initialized seed for model, 0 by default
     'key_index': 1,  # key index for jax.random
@@ -103,7 +118,7 @@ for i in range(len(org_label_list_split)):
     for j in range(params['num_task']):
         # Initialization of model and optimizer, inp_rng... should be initialized outside this function
         model = nn_index(params['nn_type'])
-        optimizer = optax.adam(learning_rate=params['learning_rate'])
+        optimizer = build_optimizer(params)
         model_params = model.init(jax.random.PRNGKey(params['ini_seed']), jax.random.normal(inp_rng, ini_sample_input))
         model_state = train_state.TrainState.create(apply_fn=model.apply, params=model_params, tx=optimizer)
 
@@ -191,7 +206,7 @@ for i in range(len(org_label_list_split)):
     test_opt_forget_matrix[i][num_pick_classes + 2] = test_forget_max_hp_list[i]
     test_opt_forget_matrix[i][num_pick_classes + 3] = sim_avg_list[i]
 
-test_file_name = 'test_' + params['ds_type'] + '_' + params['nn_type'] + '_' + params['sim_type'] + '_' + 'P' + str(params['num_task']) + '_C' + str(params['num_output_classes']) + '_opt_forget_index' + str(params['num_index'])
+test_file_name = 'test_' + params['ds_type'] + '_' + params['nn_type'] + '_' + params['optimizer'] + '_' + params['sim_type'] + '_' + 'P' + str(params['num_task']) + '_C' + str(params['num_output_classes']) + '_opt_forget_index' + str(params['num_index'])
 with open(test_file_name + '.csv', mode="w", newline='') as csvfile:
     writer = csv.writer(csvfile)
     writer.writerows(test_opt_forget_matrix)

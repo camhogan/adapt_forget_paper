@@ -9,6 +9,54 @@ from network import nn_index
 
 
 # Using optax as optimer
+def build_optimizer(const_params):
+    """Build an optax optimizer from experiment parameters."""
+    optimizer_name = const_params.get('optimizer', 'adam').lower()
+    learning_rate = const_params['learning_rate']
+
+    if optimizer_name == 'sgd':
+        return optax.sgd(learning_rate=learning_rate)
+
+    if optimizer_name in ('sgd_momentum', 'sgdm', 'momentum'):
+        return optax.sgd(
+            learning_rate=learning_rate,
+            momentum=const_params.get('sgd_momentum', 0.9),
+            nesterov=const_params.get('sgd_nesterov', False),
+        )
+
+    if optimizer_name == 'adam':
+        return optax.adam(
+            learning_rate=learning_rate,
+            b1=const_params.get('adam_b1', 0.9),
+            b2=const_params.get('adam_b2', 0.999),
+            eps=const_params.get('adam_eps', 1e-8),
+        )
+
+    if optimizer_name == 'adamw':
+        return optax.adamw(
+            learning_rate=learning_rate,
+            b1=const_params.get('adamw_b1', 0.9),
+            b2=const_params.get('adamw_b2', 0.999),
+            eps=const_params.get('adamw_eps', 1e-8),
+            weight_decay=const_params.get('adamw_weight_decay', 1e-4),
+        )
+
+    if optimizer_name in ('rmsprop', 'rms_prop'):
+        return optax.rmsprop(
+            learning_rate=learning_rate,
+            decay=const_params.get('rmsprop_decay', 0.9),
+            eps=const_params.get('rmsprop_eps', 1e-8),
+            initial_scale=const_params.get('rmsprop_initial_scale', 0.0),
+            centered=const_params.get('rmsprop_centered', False),
+            momentum=const_params.get('rmsprop_momentum', 0.0),
+            nesterov=const_params.get('rmsprop_nesterov', False),
+        )
+
+    raise ValueError(
+        "Unknown optimizer '{}'. Choose from: sgd, sgd_momentum, adam, adamw, rmsprop.".format(optimizer_name)
+    )
+
+
 @jax.jit
 def apply_model(state, images, labels):
     """Computes gradients, loss and accuracy for a single batch."""
@@ -135,7 +183,7 @@ def contin_train(const_params, train_ds_list_ordered, test_ds_list_ordered, grou
 
     # Initialization of model and optimizer
     model = nn_index(const_params['nn_type'])
-    optimizer = optax.adam(learning_rate=const_params['learning_rate'])
+    optimizer = build_optimizer(const_params)
     # inp_rng... should be initialized outside this function
     model_params = model.init(jax.random.PRNGKey(const_params['ini_seed']), jax.random.normal(inp_rng, ini_sample_input))
     model_state = train_state.TrainState.create(apply_fn=model.apply, params=model_params, tx=optimizer)
@@ -184,7 +232,7 @@ def contin_train_epoch_print(const_params, train_ds_list_ordered, test_ds_list_o
 
     # Initialization of model and optimizer
     model = nn_index(const_params['nn_type'])
-    optimizer = optax.adam(learning_rate=const_params['learning_rate'])
+    optimizer = build_optimizer(const_params)
     # inp_rng... should be initialized outside this function
     model_params = model.init(jax.random.PRNGKey(const_params['ini_seed']), jax.random.normal(inp_rng, ini_sample_input))
     model_state = train_state.TrainState.create(apply_fn=model.apply, params=model_params, tx=optimizer)
@@ -233,7 +281,7 @@ def contin_learn_forget(const_params, train_ds_list_ordered, test_ds_list_ordere
 
     # Initialization of model and optimizer
     model = nn_index(const_params['nn_type'])
-    optimizer = optax.adam(learning_rate=const_params['learning_rate'])
+    optimizer = build_optimizer(const_params)
     # inp_rng... should be initialized outside this function
     model_params = model.init(jax.random.PRNGKey(const_params['ini_seed']), jax.random.normal(inp_rng, ini_sample_input))
     model_state = train_state.TrainState.create(apply_fn=model.apply, params=model_params, tx=optimizer)

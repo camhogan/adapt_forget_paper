@@ -25,9 +25,13 @@ def normalize_image(image, label):
 
 
 # regularization of train dataset
-def train_ds_norm(train_ds, batch_size, shuffle_size):
+def train_ds_norm(train_ds, batch_size, shuffle_size, shuffle_seed=None, reshuffle_each_iteration=True):
     train_ds = train_ds.map(normalize_image)
-    train_ds = train_ds.shuffle(shuffle_size).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
+    if shuffle_seed is None:
+        train_ds = train_ds.shuffle(shuffle_size)
+    else:
+        train_ds = train_ds.shuffle(shuffle_size, seed=shuffle_seed, reshuffle_each_iteration=reshuffle_each_iteration)
+    train_ds = train_ds.batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
     train_ds = tfds.as_numpy(train_ds)
     return train_ds
 
@@ -47,7 +51,7 @@ def ds_upload(ds_dir, ds_type):
 
 
 # Generation of dataloader and split into several groups
-def gen_ds_load(group_label, const_params, train_dataset, test_dataset):
+def gen_ds_load(group_label, const_params, train_dataset, test_dataset, seed_base=None, reshuffle_each_iteration=False):
     batch_size = const_params['batch_size']
     num_task = const_params['num_task']
     shuffle_size = const_params['shuffle_size']
@@ -57,7 +61,16 @@ def gen_ds_load(group_label, const_params, train_dataset, test_dataset):
     for i in range(num_task):
         # Apply filtering to the dataset based on train groups
         train_ds = train_dataset.filter(filter_by_labels(group_label[i]))
-        train_ds = train_ds_norm(train_ds, batch_size, shuffle_size)
+        if seed_base is None:
+            train_ds = train_ds_norm(train_ds, batch_size, shuffle_size)
+        else:
+            train_ds = train_ds_norm(
+                train_ds,
+                batch_size,
+                shuffle_size,
+                shuffle_seed=seed_base + i,
+                reshuffle_each_iteration=reshuffle_each_iteration,
+            )
         train_ds_list.append(train_ds)
         # Apply filtering to the dataset based on test groups
         test_ds = test_dataset.filter(filter_by_labels(group_label[i]))
@@ -67,7 +80,7 @@ def gen_ds_load(group_label, const_params, train_dataset, test_dataset):
 
 
 # Specific dataloader for -gHg-model-based similarity calculation
-def gen_ds_load_neg_ghg(group_label, const_params, train_dataset, test_dataset):
+def gen_ds_load_neg_ghg(group_label, const_params, train_dataset, test_dataset, seed_base=None, reshuffle_each_iteration=False):
     ghg_batch_size = const_params['ghg_batch_size']
     num_task = const_params['num_task']
     shuffle_size = const_params['shuffle_size']
@@ -77,7 +90,16 @@ def gen_ds_load_neg_ghg(group_label, const_params, train_dataset, test_dataset):
     for i in range(num_task):
         # Apply filtering to the dataset based on train groups
         train_ds = train_dataset.filter(filter_by_labels(group_label[i]))
-        train_ds = train_ds_norm(train_ds, ghg_batch_size, shuffle_size)
+        if seed_base is None:
+            train_ds = train_ds_norm(train_ds, ghg_batch_size, shuffle_size)
+        else:
+            train_ds = train_ds_norm(
+                train_ds,
+                ghg_batch_size,
+                shuffle_size,
+                shuffle_seed=seed_base + i,
+                reshuffle_each_iteration=reshuffle_each_iteration,
+            )
         train_ds_list.append(train_ds)
         # Apply filtering to the dataset based on test groups
         test_ds = test_dataset.filter(filter_by_labels(group_label[i]))
