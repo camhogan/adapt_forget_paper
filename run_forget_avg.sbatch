@@ -25,4 +25,7 @@ conda activate adapt-forget
 cd "${SLURM_SUBMIT_DIR}"
 
 export XLA_FLAGS="--xla_gpu_autotune_level=0 --xla_gpu_strict_conv_algorithm_picker=false"
+export XLA_FLAGS="--xla_gpu_autotune_level=0 --xla_gpu_strict_conv_algorithm_picker=false"
+export XLA_PYTHON_CLIENT_PREALLOCATE=false
+export XLA_PYTHON_CLIENT_MEM_FRACTION=0.70
 python -u experiment/forget/forget_avg.py
