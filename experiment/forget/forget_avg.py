@@ -33,7 +33,7 @@ params = {
     'num_all_classes': 10,  # num of total classes in dataset (ex. 100 for cifar100)
     'task_shift_severe': True,  # False: similar task structure, True: dramatic task shifts
     'optimizer': 'adam',  # optimizer: 'sgd', 'sgd_momentum', 'adam', 'adamw', 'rmsprop'
-    'optimizer_list': ['adam'],  # list of optimizers to compare in one run
+    'optimizer_list': ['sgd', 'sgd_momentum', 'adam', 'adamw', 'rmsprop'],  # list of optimizers to compare in one run
     'learning_rate': 0.001,  # learning rate
     'sgd_momentum': 0.9,  # used by sgd_momentum
     'sgd_nesterov': False,  # used by sgd_momentum
