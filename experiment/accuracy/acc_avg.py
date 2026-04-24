@@ -68,6 +68,13 @@ params = {
     'require_jax_gpu': True,  # fail fast if JAX backend is not GPU
 }
 
+# Optional override to run a single optimizer per process, e.g.:
+# SWEEP_OPTIMIZER=adam python -u experiment/accuracy/acc_avg.py
+opt_override = os.getenv("SWEEP_OPTIMIZER")
+if opt_override:
+    params['optimizer'] = opt_override
+    params['optimizer_list'] = [opt_override]
+
 ###############################################################################################################
 """
 pre-allocation and initialization of parameters, default and no need to change in general case 
