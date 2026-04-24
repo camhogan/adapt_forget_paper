@@ -195,14 +195,14 @@ for optimizer_name in optimizer_list:
                 acc_forget_list = []
                 n_label_cols = params['num_task'] * params['num_output_classes']
                 seed_detail_header = (
-                    ['pick_index', 'seed']
+                    ['optimizer', 'learning_rate', 'sgd_momentum', 'batch_size', 'pick_index', 'seed']
                     + [f'orig_label_{k}' for k in range(n_label_cols)]
                     + [f'target_label_{k}' for k in range(n_label_cols)]
                     + ['train_avg', 'train_min', 'train_max', 'test_avg', 'test_min', 'test_max']
                 )
                 seed_detail_rows = [seed_detail_header]
                 forget_seed_detail_header = (
-                    ['pick_index', 'seed']
+                    ['optimizer', 'learning_rate', 'sgd_momentum', 'batch_size', 'pick_index', 'seed']
                     + [f'orig_label_{k}' for k in range(n_label_cols)]
                     + [f'target_label_{k}' for k in range(n_label_cols)]
                     + ['forget_avg']
@@ -281,7 +281,7 @@ for optimizer_name in optimizer_list:
                     seed_test_max_list.append(jnp.max(jnp.array(acc_test_perm_list)))
                     seed_forget_avg_list.append(acc_forget_avg)
                     seed_detail_rows.append(
-                        [i, int(seed_value)]
+                        [params['optimizer'], float(params['learning_rate']), float(params['sgd_momentum']), int(params['batch_size']), i, int(seed_value)]
                         + flat_org_labels
                         + flat_target_labels
                         + [
@@ -294,7 +294,7 @@ for optimizer_name in optimizer_list:
                         ]
                     )
                     forget_seed_detail_rows.append(
-                        [i, int(seed_value)]
+                        [params['optimizer'], float(params['learning_rate']), float(params['sgd_momentum']), int(params['batch_size']), i, int(seed_value)]
                         + flat_org_labels
                         + flat_target_labels
                         + [float(acc_forget_avg)]
@@ -311,10 +311,14 @@ for optimizer_name in optimizer_list:
                 sweep_tag += '_mom' + float_tag(params['sgd_momentum'])
             sweep_tag += '_bs' + str(params['batch_size'])
             # Additional seed-level breakdown CSV with average row at bottom.
-            metric_start = 2 + 2 * n_label_cols
+            metric_start = 6 + 2 * n_label_cols
             metric_matrix = np.array([row[metric_start:] for row in seed_detail_rows[1:]], dtype=float)
             metric_means = list(np.mean(metric_matrix, axis=0))
-            seed_detail_rows.append(['AVG', '-'] + [''] * (2 * n_label_cols) + metric_means)
+            seed_detail_rows.append(
+                [params['optimizer'], float(params['learning_rate']), float(params['sgd_momentum']), int(params['batch_size']), 'AVG', '-']
+                + [''] * (2 * n_label_cols)
+                + metric_means
+            )
             seed_file_name = (
                 params['ds_type'] + '_' + params['nn_type'] + '_' + params['optimizer'] + '_' + 'P'
                 + str(params['num_task']) + '_C' + str(params['num_output_classes']) + sweep_tag + '_perm_avg_seed_detail_index'
@@ -346,10 +350,14 @@ for optimizer_name in optimizer_list:
                 writer = csv.writer(csvfile)
                 writer.writerows(perm_forget_avg_matrix)
 
-            forget_metric_start = 2 + 2 * n_label_cols
+            forget_metric_start = 6 + 2 * n_label_cols
             forget_metric_matrix = np.array([row[forget_metric_start:] for row in forget_seed_detail_rows[1:]], dtype=float)
             forget_metric_means = list(np.mean(forget_metric_matrix, axis=0))
-            forget_seed_detail_rows.append(['AVG', '-'] + [''] * (2 * n_label_cols) + forget_metric_means)
+            forget_seed_detail_rows.append(
+                [params['optimizer'], float(params['learning_rate']), float(params['sgd_momentum']), int(params['batch_size']), 'AVG', '-']
+                + [''] * (2 * n_label_cols)
+                + forget_metric_means
+            )
             forget_seed_file_name = (
                 params['ds_type'] + '_' + params['nn_type'] + '_' + params['optimizer'] + '_' + 'P'
                 + str(params['num_task']) + '_C' + str(params['num_output_classes']) + sweep_tag + '_forget_avg_seed_detail_index'
