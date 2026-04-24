@@ -15,7 +15,7 @@ sys.path.insert(0, parent_dir)
 from dataset_process import ds_upload, gen_ds_load
 from opt_order import all_perm_task3, perm
 from group_split import random_pick_into_groups
-from continual_model import contin_train
+from continual_model import contin_train_with_forget
 
 ###############################################################################################################
 """
@@ -33,9 +33,11 @@ params = {
     'num_all_classes': 10,  # num of total classes in dataset (ex. 100 for cifar100)
     'task_shift_severe': True,  # False: similar task structure, True: dramatic task shifts
     'optimizer': 'adam',  # optimizer: 'sgd', 'sgd_momentum', 'adam', 'adamw', 'rmsprop'
-    'optimizer_list': ['sgd', 'sgd_momentum', 'adam', 'adamw', 'rmsprop'],  # list of optimizers to compare in one run
-    'learning_rate': 0.001,  # learning rate
-    'sgd_momentum': 0.9,  # used by sgd_momentum
+    'optimizer_list': ['adam', 'sgd', 'sgd_momentum'],  # list of optimizers to compare in one run
+    'learning_rate': 0.001,  # default learning rate
+    'learning_rate_list': [0.0003, 0.001, 0.003, 0.01, 0.1],  # sweep list for learning rate
+    'sgd_momentum': 0.9,  # default used by sgd_momentum
+    'sgd_momentum_list': [0.8, 0.9, 0.95],  # sweep list for sgd_momentum
     'sgd_nesterov': False,  # used by sgd_momentum
     'adam_b1': 0.9,  # used by adam
     'adam_b2': 0.999,  # used by adam
@@ -52,7 +54,8 @@ params = {
     'rmsprop_nesterov': False,  # used by rmsprop
     'num_regular_epochs': 5,  # number of epochs per task during regular training
     'num_continue_epochs': 5,  # number of epochs per task during continue training
-    'batch_size': 4,   # batch size
+    'batch_size': 64,   # default batch size
+    'batch_size_list': [64, 128],  # sweep list for batch size
     'shuffle_size': 1000,  # shuffle size
     'image_size': [32, 32, 3],  # size of image data, [28, 28, 1] for grayscale image, [32, 32, 3] for colored ones
 
@@ -62,6 +65,7 @@ params = {
     'num_seeds': 10,  # number of random seeds to average over
     'num_index': 1,  # job index to submit, related to classes split and labels split
     'ini_seed': 0,  # initialized seed for model, set to constant
+    'require_jax_gpu': True,  # fail fast if JAX backend is not GPU
 }
 
 ###############################################################################################################
@@ -93,6 +97,16 @@ Start = time.time()  # time record begin, not necessary
 random.seed(params['ini_seed'])
 np.random.seed(params['ini_seed'])
 tf.random.set_seed(params['ini_seed'])
+
+# JAX backend preflight check.
+jax_backend = jax.default_backend()
+jax_device_kinds = [d.device_kind for d in jax.devices()]
+print("JAX backend:", jax_backend)
+print("JAX devices:", jax_device_kinds)
+if params.get('require_jax_gpu', False) and jax_backend != 'gpu':
+    raise RuntimeError(
+        "JAX is not using GPU (backend='{}'). Refusing to run sweep on CPU.".format(jax_backend)
+    )
 
 # Load the CIFAR-10 dataset using tensorflow_datasets
 data_dir = '/tmp/tfds_acc'
@@ -153,108 +167,209 @@ for i in range(params['num_pick']):
         }
     )
 
+summary_rows = [["optimizer", "learning_rate", "sgd_momentum", "batch_size", "forget_mean", "run_time_sec"]]
+
+
+def float_tag(v):
+    return str(v).replace('.', 'p')
+
+
 for optimizer_name in optimizer_list:
-    params['optimizer'] = optimizer_name
-    opt_start = time.time()
-    print("running optimizer:", optimizer_name)
-    base_ini_seed = params['ini_seed']
-    seed_list = [base_ini_seed + s for s in range(params.get('num_seeds', 1))]
+    lr_list = params.get('learning_rate_list', [params['learning_rate']])
+    mom_list = params.get('sgd_momentum_list', [params['sgd_momentum']]) if optimizer_name == 'sgd_momentum' else [params['sgd_momentum']]
+    bs_list = params.get('batch_size_list', [params['batch_size']])
 
-    n_label_cols = params['num_task'] * params['num_output_classes']
-    seed_detail_header = (
-        ['pick_index', 'seed']
-        + [f'orig_label_{k}' for k in range(n_label_cols)]
-        + [f'target_label_{k}' for k in range(n_label_cols)]
-        + ['train_avg', 'train_min', 'train_max', 'test_avg', 'test_min', 'test_max']
-    )
-    seed_detail_rows = [seed_detail_header]
+    for learning_rate in lr_list:
+        for sgd_momentum in mom_list:
+            for batch_size in bs_list:
+                params['optimizer'] = optimizer_name
+                params['learning_rate'] = learning_rate
+                params['sgd_momentum'] = sgd_momentum
+                params['batch_size'] = batch_size
+                opt_start = time.time()
+                print(f"running optimizer: {optimizer_name}, lr: {learning_rate}, momentum: {sgd_momentum}, batch_size: {batch_size}")
+                base_ini_seed = params['ini_seed']
+                seed_list = [base_ini_seed + s for s in range(params.get('num_seeds', 1))]
 
-    # accuracy calculation for num_pick sample points
-    for i in range(params['num_pick']):
-        group_labels = scenarios[i]["group_labels"]
-        print("group_labels:", group_labels)
+                org_label_list_split, target_label_list_split = [], []
+                acc_forget_list = []
+                n_label_cols = params['num_task'] * params['num_output_classes']
+                seed_detail_header = (
+                    ['pick_index', 'seed']
+                    + [f'orig_label_{k}' for k in range(n_label_cols)]
+                    + [f'target_label_{k}' for k in range(n_label_cols)]
+                    + ['train_avg', 'train_min', 'train_max', 'test_avg', 'test_min', 'test_max']
+                )
+                seed_detail_rows = [seed_detail_header]
+                forget_seed_detail_header = (
+                    ['pick_index', 'seed']
+                    + [f'orig_label_{k}' for k in range(n_label_cols)]
+                    + [f'target_label_{k}' for k in range(n_label_cols)]
+                    + ['forget_avg']
+                )
+                forget_seed_detail_rows = [forget_seed_detail_header]
 
-        # fixed target label mapping for fair optimizer comparison
-        target_random_labels = scenarios[i]["target_random_labels"]
-        flat_org_labels = [int(v) for pair in np.array(group_labels).tolist() for v in pair]
-        flat_target_labels = [int(v) for pair in target_random_labels for v in pair]
-        seed_train_avg_list, seed_train_min_list, seed_train_max_list = [], [], []
-        seed_test_avg_list, seed_test_min_list, seed_test_max_list = [], [], []
+            # accuracy calculation for num_pick sample points
+            for i in range(params['num_pick']):
+                group_labels = scenarios[i]["group_labels"]
+                print("group_labels:", group_labels)
 
-        for seed_idx, seed_value in enumerate(seed_list):
-            params['ini_seed'] = seed_value
-            random.seed(seed_value)
-            np.random.seed(seed_value)
-            tf.random.set_seed(seed_value)
+                # fixed target label mapping for fair optimizer comparison
+                target_random_labels = scenarios[i]["target_random_labels"]
+                flat_org_labels = [int(v) for pair in np.array(group_labels).tolist() for v in pair]
+                flat_target_labels = [int(v) for pair in target_random_labels for v in pair]
+                seed_train_avg_list, seed_train_min_list, seed_train_max_list = [], [], []
+                seed_test_avg_list, seed_test_min_list, seed_test_max_list = [], [], []
+                seed_forget_avg_list = []
 
-            # ds list generation with deterministic shuffling seed for fair optimizer comparison
-            train_ds_list_org, test_ds_list_org = gen_ds_load(
-                group_labels,
-                params,
-                train_ds,
-                test_ds,
-                seed_base=scenarios[i]["seed_base"] + seed_idx * 10000,
-                reshuffle_each_iteration=False,
+                for seed_idx, seed_value in enumerate(seed_list):
+                    params['ini_seed'] = seed_value
+                    random.seed(seed_value)
+                    np.random.seed(seed_value)
+                    tf.random.set_seed(seed_value)
+
+                    # ds list generation with deterministic shuffling seed for fair optimizer comparison
+                    train_ds_list_org, test_ds_list_org = gen_ds_load(
+                        group_labels,
+                        params,
+                        train_ds,
+                        test_ds,
+                        seed_base=scenarios[i]["seed_base"] + seed_idx * 10000,
+                        reshuffle_each_iteration=False,
+                    )
+
+                    # accuracy calculation for fixed permutation list to obtain acc_avg, min and max
+                    acc_train_avg, acc_test_avg, acc_train_perm_list, acc_test_perm_list = 0, 0, [], []
+                    acc_forget_avg = 0
+                    for order in scenarios[i]["orders"]:
+                        # reorder of dataset, labels based on task order
+                        train_ds_list_ordered, test_ds_list_ordered, group_labels_ordered, target_random_labels_ordered = [], [], [], []
+                        for k in range(params['num_task']):
+                            train_ds_list_ordered.append(train_ds_list_org[order[k]])
+                            test_ds_list_ordered.append(test_ds_list_org[order[k]])
+                            group_labels_ordered.append(group_labels[order[k]])
+                            target_random_labels_ordered.append(target_random_labels[order[k]])
+
+                        # continual training, only acc_train_task_avg and acc_test_task_avg here for continual learn performance
+                        print(
+                            "continual train task order:",
+                            order,
+                            "seed:",
+                            seed_value,
+                            "optimizer:",
+                            params['optimizer'],
+                            "lr:",
+                            params['learning_rate'],
+                            "momentum:",
+                            params['sgd_momentum'],
+                            "batch_size:",
+                            params['batch_size'],
+                        )
+                        train_multi_task_acc_history_list, acc_train_history, acc_test_history, acc_train_task_avg, acc_test_task_avg, acc_forget \
+                            = contin_train_with_forget(params, train_ds_list_ordered, test_ds_list_ordered, group_labels_ordered, target_random_labels_ordered)
+                        acc_train_perm_list.append(acc_train_task_avg)
+                        acc_test_perm_list.append(acc_test_task_avg)
+                        acc_train_avg += acc_train_task_avg / len(scenarios[i]["orders"])
+                        acc_test_avg += acc_test_task_avg / len(scenarios[i]["orders"])
+                        acc_forget_avg += acc_forget / len(scenarios[i]["orders"])
+
+                    seed_train_avg_list.append(acc_train_avg)
+                    seed_train_min_list.append(jnp.min(jnp.array(acc_train_perm_list)))
+                    seed_train_max_list.append(jnp.max(jnp.array(acc_train_perm_list)))
+                    seed_test_avg_list.append(acc_test_avg)
+                    seed_test_min_list.append(jnp.min(jnp.array(acc_test_perm_list)))
+                    seed_test_max_list.append(jnp.max(jnp.array(acc_test_perm_list)))
+                    seed_forget_avg_list.append(acc_forget_avg)
+                    seed_detail_rows.append(
+                        [i, int(seed_value)]
+                        + flat_org_labels
+                        + flat_target_labels
+                        + [
+                            float(acc_train_avg),
+                            float(jnp.min(jnp.array(acc_train_perm_list))),
+                            float(jnp.max(jnp.array(acc_train_perm_list))),
+                            float(acc_test_avg),
+                            float(jnp.min(jnp.array(acc_test_perm_list))),
+                            float(jnp.max(jnp.array(acc_test_perm_list))),
+                        ]
+                    )
+                    forget_seed_detail_rows.append(
+                        [i, int(seed_value)]
+                        + flat_org_labels
+                        + flat_target_labels
+                        + [float(acc_forget_avg)]
+                    )
+
+                org_label_list_split.append(group_labels)
+                target_label_list_split.append(target_random_labels)
+                acc_forget_list.append(float(np.mean(np.array(seed_forget_avg_list))))
+
+            params['ini_seed'] = base_ini_seed
+
+            sweep_tag = '_lr' + float_tag(params['learning_rate'])
+            if params['optimizer'] == 'sgd_momentum':
+                sweep_tag += '_mom' + float_tag(params['sgd_momentum'])
+            sweep_tag += '_bs' + str(params['batch_size'])
+            # Additional seed-level breakdown CSV with average row at bottom.
+            metric_start = 2 + 2 * n_label_cols
+            metric_matrix = np.array([row[metric_start:] for row in seed_detail_rows[1:]], dtype=float)
+            metric_means = list(np.mean(metric_matrix, axis=0))
+            seed_detail_rows.append(['AVG', '-'] + [''] * (2 * n_label_cols) + metric_means)
+            seed_file_name = (
+                params['ds_type'] + '_' + params['nn_type'] + '_' + params['optimizer'] + '_' + 'P'
+                + str(params['num_task']) + '_C' + str(params['num_output_classes']) + sweep_tag + '_perm_avg_seed_detail_index'
+                + str(params['num_index'])
             )
+            with open(seed_file_name + '.csv', mode="w", newline='') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerows(seed_detail_rows)
 
-            # accuracy calculation for fixed permutation list to obtain acc_avg, min and max
-            acc_train_avg, acc_test_avg, acc_train_perm_list, acc_test_perm_list = 0, 0, [], []
-            for order in scenarios[i]["orders"]:
-                # reorder of dataset, labels based on task order
-                train_ds_list_ordered, test_ds_list_ordered, group_labels_ordered, target_random_labels_ordered = [], [], [], []
-                for k in range(params['num_task']):
-                    train_ds_list_ordered.append(train_ds_list_org[order[k]])
-                    test_ds_list_ordered.append(test_ds_list_org[order[k]])
-                    group_labels_ordered.append(group_labels[order[k]])
-                    target_random_labels_ordered.append(target_random_labels[order[k]])
-
-                # continual training, only acc_train_task_avg and acc_test_task_avg here for continual learn performance
-                print("continual train task order:", order, "seed:", seed_value)
-                train_multi_task_acc_history_list, acc_train_history, acc_test_history, acc_train_task_avg, acc_test_task_avg \
-                    = contin_train(params, train_ds_list_ordered, test_ds_list_ordered, group_labels_ordered, target_random_labels_ordered)
-                acc_train_perm_list.append(acc_train_task_avg)
-                acc_test_perm_list.append(acc_test_task_avg)
-                acc_train_avg += acc_train_task_avg / len(scenarios[i]["orders"])
-                acc_test_avg += acc_test_task_avg / len(scenarios[i]["orders"])
-
-            seed_train_avg_list.append(acc_train_avg)
-            seed_train_min_list.append(jnp.min(jnp.array(acc_train_perm_list)))
-            seed_train_max_list.append(jnp.max(jnp.array(acc_train_perm_list)))
-            seed_test_avg_list.append(acc_test_avg)
-            seed_test_min_list.append(jnp.min(jnp.array(acc_test_perm_list)))
-            seed_test_max_list.append(jnp.max(jnp.array(acc_test_perm_list)))
-            seed_detail_rows.append(
-                [i, int(seed_value)]
-                + flat_org_labels
-                + flat_target_labels
-                + [
-                    float(acc_train_avg),
-                    float(jnp.min(jnp.array(acc_train_perm_list))),
-                    float(jnp.max(jnp.array(acc_train_perm_list))),
-                    float(acc_test_avg),
-                    float(jnp.min(jnp.array(acc_test_perm_list))),
-                    float(jnp.max(jnp.array(acc_test_perm_list))),
-                ]
+            # Forget outputs (same format as forget_avg.py), produced from the same training pass above.
+            perm_forget_avg_matrix = np.zeros((params['num_pick'], params['num_task'] * params['num_output_classes'] * 2 + 1))
+            n_labels = params['num_task'] * params['num_output_classes'] * 2
+            for i in range(params['num_pick']):
+                for j in range(params['num_task']):
+                    for k in range(params['num_output_classes']):
+                        perm_forget_avg_matrix[i][j * params['num_output_classes'] + k] = org_label_list_split[i][j][k]
+                for j in range(params['num_task']):
+                    for k in range(params['num_output_classes']):
+                        perm_forget_avg_matrix[i][
+                            params['num_task'] * params['num_output_classes'] + j * params['num_output_classes'] + k
+                        ] = target_label_list_split[i][j][k]
+                perm_forget_avg_matrix[i][n_labels] = acc_forget_list[i]
+            forget_file_name = (
+                params['ds_type'] + '_' + params['nn_type'] + '_' + params['optimizer'] + '_' + 'P'
+                + str(params['num_task']) + '_C' + str(params['num_output_classes']) + sweep_tag + '_forget_avg_index'
+                + str(params['num_index'])
             )
+            with open(forget_file_name + '.csv', mode="w", newline='') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerows(perm_forget_avg_matrix)
 
-    params['ini_seed'] = base_ini_seed
+            forget_metric_start = 2 + 2 * n_label_cols
+            forget_metric_matrix = np.array([row[forget_metric_start:] for row in forget_seed_detail_rows[1:]], dtype=float)
+            forget_metric_means = list(np.mean(forget_metric_matrix, axis=0))
+            forget_seed_detail_rows.append(['AVG', '-'] + [''] * (2 * n_label_cols) + forget_metric_means)
+            forget_seed_file_name = (
+                params['ds_type'] + '_' + params['nn_type'] + '_' + params['optimizer'] + '_' + 'P'
+                + str(params['num_task']) + '_C' + str(params['num_output_classes']) + sweep_tag + '_forget_avg_seed_detail_index'
+                + str(params['num_index'])
+            )
+            with open(forget_seed_file_name + '.csv', mode="w", newline='') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerows(forget_seed_detail_rows)
 
-    # Additional seed-level breakdown CSV with average row at bottom.
-    metric_start = 2 + 2 * n_label_cols
-    metric_matrix = np.array([row[metric_start:] for row in seed_detail_rows[1:]], dtype=float)
-    metric_means = list(np.mean(metric_matrix, axis=0))
-    seed_detail_rows.append(['AVG', '-'] + [''] * (2 * n_label_cols) + metric_means)
-    seed_file_name = (
-        params['ds_type'] + '_' + params['nn_type'] + '_' + params['optimizer'] + '_' + 'P'
-        + str(params['num_task']) + '_C' + str(params['num_output_classes']) + '_perm_avg_seed_detail_index'
-        + str(params['num_index'])
-    )
-    with open(seed_file_name + '.csv', mode="w", newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerows(seed_detail_rows)
+            opt_time = time.time() - opt_start
+            summary_rows.append([optimizer_name, params['learning_rate'], params['sgd_momentum'], params['batch_size'], float(np.mean(np.array(acc_forget_list))), opt_time])
+            print(f'optimizer {optimizer_name} finished in {opt_time:.1f} sec')
 
-    opt_time = time.time() - opt_start
-    print(f'optimizer {optimizer_name} finished in {opt_time:.1f} sec')
+summary_name = (
+    params['ds_type'] + '_' + params['nn_type'] + '_P' + str(params['num_task']) + '_C'
+    + str(params['num_output_classes']) + '_optimizer_compare_forget_index' + str(params['num_index']) + '.csv'
+)
+with open(summary_name, mode="w", newline='') as csvfile:
+    writer = csv.writer(csvfile)
+    writer.writerows(summary_rows)
 
 End = time.time()
 print("time cost:", End-Start)

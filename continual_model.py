@@ -219,6 +219,93 @@ def contin_train(const_params, train_ds_list_ordered, test_ds_list_ordered, grou
     return train_multi_task_acc_history_list, acc_train_list, acc_test_list, acc_train_mean, acc_test_mean
 
 
+def contin_train_with_forget(const_params, train_ds_list_ordered, test_ds_list_ordered, group_labels_ordered, random_labels_ordered):
+    """Continual training model with both accuracy and forget metrics from one training pass."""
+    rng, inp_rng, init_rng = jax.random.split(jax.random.PRNGKey(0), 3)
+    ini_sample_input = (
+        const_params['batch_size'],
+        const_params['image_size'][0],
+        const_params['image_size'][1],
+        const_params['image_size'][2],
+    )
+
+    model = nn_index(const_params['nn_type'])
+    optimizer = build_optimizer(const_params)
+    model_params = model.init(
+        jax.random.PRNGKey(const_params['ini_seed']),
+        jax.random.normal(inp_rng, ini_sample_input),
+    )
+    model_state = train_state.TrainState.create(apply_fn=model.apply, params=model_params, tx=optimizer)
+
+    train_multi_task_acc_history_list = []
+    model_state_list = []
+    print("continual training acc history report for specific order:")
+    for i in range(const_params['num_task']):
+        model_state, loss_history, accuracy_history = train_model(
+            model_state,
+            train_ds_list_ordered[i],
+            const_params['num_continue_epochs'],
+            group_labels_ordered[i],
+            random_labels_ordered[i],
+            const_params['num_output_classes'],
+        )
+        model_state_list.append(model_state)
+        train_multi_task_acc_history_list.append(accuracy_history)
+
+    acc_train_list, loss_train_mean, acc_train_mean = [], 0, 0
+    for i in range(const_params['num_task']):
+        loss, acc = test_model(
+            model_state,
+            train_ds_list_ordered[i],
+            group_labels_ordered[i],
+            random_labels_ordered[i],
+            const_params['num_output_classes'],
+        )
+        acc_train_list.append(acc)
+        loss_train_mean += loss / const_params['num_task']
+        acc_train_mean += acc / const_params['num_task']
+
+    acc_test_list, loss_test_mean, acc_test_mean = [], 0, 0
+    for i in range(const_params['num_task']):
+        loss, acc = test_model(
+            model_state,
+            test_ds_list_ordered[i],
+            group_labels_ordered[i],
+            random_labels_ordered[i],
+            const_params['num_output_classes'],
+        )
+        acc_test_list.append(acc)
+        loss_test_mean += loss / const_params['num_task']
+        acc_test_mean += acc / const_params['num_task']
+
+    acc_test_forget_mean = 0
+    for i in range(const_params['num_task'] - 1):
+        loss, acc_final = test_model(
+            model_state,
+            test_ds_list_ordered[i],
+            group_labels_ordered[i],
+            random_labels_ordered[i],
+            const_params['num_output_classes'],
+        )
+        loss, acc_task_i = test_model(
+            model_state_list[i],
+            test_ds_list_ordered[i],
+            group_labels_ordered[i],
+            random_labels_ordered[i],
+            const_params['num_output_classes'],
+        )
+        acc_test_forget_mean += (acc_task_i - acc_final) / (const_params['num_task'] - 1)
+
+    return (
+        train_multi_task_acc_history_list,
+        acc_train_list,
+        acc_test_list,
+        acc_train_mean,
+        acc_test_mean,
+        acc_test_forget_mean,
+    )
+
+
 def contin_train_epoch_print(const_params, train_ds_list_ordered, test_ds_list_ordered, group_labels_ordered, random_labels_ordered):
     """continual training model, but after each epoch of training, apply it to test dataset
     This function is used to show the accuracy instantly after each epoch of training
