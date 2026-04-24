@@ -75,6 +75,9 @@ if opt_override:
     params['optimizer'] = opt_override
     params['optimizer_list'] = [opt_override]
 
+# Run tag used to avoid filename/cache collisions in parallel multi-process runs.
+run_tag = opt_override if opt_override else "all"
+
 ###############################################################################################################
 """
 pre-allocation and initialization of parameters, default and no need to change in general case 
@@ -115,8 +118,9 @@ if params.get('require_jax_gpu', False) and jax_backend != 'gpu':
         "JAX is not using GPU (backend='{}'). Refusing to run sweep on CPU.".format(jax_backend)
     )
 
-# Load the CIFAR-10 dataset using tensorflow_datasets
-data_dir = '/tmp/tfds_acc'
+# Load the dataset using tensorflow_datasets.
+# Use per-run cache directory to avoid parallel download/prepare collisions.
+data_dir = '/tmp/tfds_acc_' + run_tag
 train_ds, test_ds = ds_upload(data_dir, params['ds_type'])
 
 optimizer_list = params.get('optimizer_list', [params['optimizer']])
@@ -380,7 +384,8 @@ for optimizer_name in optimizer_list:
 
 summary_name = (
     params['ds_type'] + '_' + params['nn_type'] + '_P' + str(params['num_task']) + '_C'
-    + str(params['num_output_classes']) + '_optimizer_compare_forget_index' + str(params['num_index']) + '.csv'
+    + str(params['num_output_classes']) + '_optimizer_compare_forget_' + run_tag + '_index'
+    + str(params['num_index']) + '.csv'
 )
 with open(summary_name, mode="w", newline='') as csvfile:
     writer = csv.writer(csvfile)
