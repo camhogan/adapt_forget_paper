@@ -21,17 +21,65 @@ from continual_model import contin_train_with_forget
 """
 parameters for experiment
 """
-params = {
+# Old CIFAR-10 parameter block (kept for reference, commented out).
+# params = {
+#     # parameters for model choose
+#     'ds_type': 'cifar10',  # dataset type: 'fashion_mnist', 'cifar10', 'cifar100'
+#     'nn_type': 'cnn2',  # neurowork model type: 'cnn2', 'cnn5', 'nonlinear2', 'nonlinear5'
+#     'sim_type': 'zero_shot',  # similarity calculation model type: zero_short, -ghg
+#
+#     # parameters for training process
+#     'num_task': 3,  # number of tasks
+#     'num_output_classes': 2,  # num of output classes
+#     'num_all_classes': 10,  # num of total classes in dataset (ex. 100 for cifar100)
+#     'task_shift_severe': True,  # False: similar task structure, True: dramatic task shifts
+#     'optimizer': 'adam',  # optimizer: 'sgd', 'sgd_momentum', 'adam', 'adamw', 'rmsprop'
+#     'optimizer_list': ['adam', 'sgd', 'sgd_momentum'],  # list of optimizers to compare in one run
+#     'learning_rate': 0.001,  # default learning rate
+#     'learning_rate_list': [0.0003, 0.001, 0.003, 0.01, 0.1],  # sweep list for learning rate
+#     'sgd_momentum': 0.9,  # default used by sgd_momentum
+#     'sgd_momentum_list': [0.8, 0.9, 0.95],  # sweep list for sgd_momentum
+#     'sgd_nesterov': False,  # used by sgd_momentum
+#     'adam_b1': 0.9,  # used by adam
+#     'adam_b2': 0.999,  # used by adam
+#     'adam_eps': 1e-8,  # used by adam
+#     'adamw_b1': 0.9,  # used by adamw
+#     'adamw_b2': 0.999,  # used by adamw
+#     'adamw_eps': 1e-8,  # used by adamw
+#     'adamw_weight_decay': 1e-4,  # used by adamw
+#     'rmsprop_decay': 0.9,  # used by rmsprop
+#     'rmsprop_eps': 1e-8,  # used by rmsprop
+#     'rmsprop_initial_scale': 0.0,  # used by rmsprop
+#     'rmsprop_centered': False,  # used by rmsprop
+#     'rmsprop_momentum': 0.0,  # used by rmsprop
+#     'rmsprop_nesterov': False,  # used by rmsprop
+#     'num_regular_epochs': 5,  # number of epochs per task during regular training
+#     'num_continue_epochs': 5,  # number of epochs per task during continue training
+#     'batch_size': 64,   # default batch size
+#     'batch_size_list': [64, 128],  # sweep list for batch size
+#     'shuffle_size': 1000,  # shuffle size
+#     'image_size': [32, 32, 3],  # size of image data, [28, 28, 1] for grayscale image, [32, 32, 3] for colored ones
+#
+#     # parameters for experiment setting
+#     'num_pick': 1,  # number of sampled task sets
+#     'num_perm': 1,  # number of multi-permutations for each sample point: 6, 30, 50 for P = 3, 5, 7
+#     'num_seeds': 10,  # number of random seeds to average over
+#     'num_index': 1,  # job index to submit, related to classes split and labels split
+#     'ini_seed': 0,  # initialized seed for model, set to constant
+#     'require_jax_gpu': True,  # fail fast if JAX backend is not GPU
+# }
+
+cifar100_params = {
     # parameters for model choose
-    'ds_type': 'cifar10',  # dataset type: 'fashion_mnist', 'cifar10', 'cifar100'
+    'ds_type': 'cifar100',  # dataset type: 'fashion_mnist', 'cifar10', 'cifar100'
     'nn_type': 'cnn2',  # neurowork model type: 'cnn2', 'cnn5', 'nonlinear2', 'nonlinear5'
     'sim_type': 'zero_shot',  # similarity calculation model type: zero_short, -ghg
 
     # parameters for training process
-    'num_task': 3,  # number of tasks
-    'num_output_classes': 2,  # num of output classes
-    'num_all_classes': 10,  # num of total classes in dataset (ex. 100 for cifar100)
-    'task_shift_severe': True,  # False: similar task structure, True: dramatic task shifts
+    'num_task': 20,  # number of binary tasks (20 pairs)
+    'num_output_classes': 2,  # num of output classes (binary tasks)
+    'num_all_classes': 100,  # total classes in CIFAR-100
+    'task_shift_severe': True,  # only used by hardcoded CIFAR-10 branch
     'optimizer': 'adam',  # optimizer: 'sgd', 'sgd_momentum', 'adam', 'adamw', 'rmsprop'
     'optimizer_list': ['adam', 'sgd', 'sgd_momentum'],  # list of optimizers to compare in one run
     'learning_rate': 0.001,  # default learning rate
@@ -52,12 +100,12 @@ params = {
     'rmsprop_centered': False,  # used by rmsprop
     'rmsprop_momentum': 0.0,  # used by rmsprop
     'rmsprop_nesterov': False,  # used by rmsprop
-    'num_regular_epochs': 5,  # number of epochs per task during regular training
-    'num_continue_epochs': 5,  # number of epochs per task during continue training
+    'num_regular_epochs': 1,  # number of epochs per task during regular training
+    'num_continue_epochs': 1,  # number of epochs per task during continue training
     'batch_size': 64,   # default batch size
     'batch_size_list': [64, 128],  # sweep list for batch size
     'shuffle_size': 1000,  # shuffle size
-    'image_size': [32, 32, 3],  # size of image data, [28, 28, 1] for grayscale image, [32, 32, 3] for colored ones
+    'image_size': [32, 32, 3],  # CIFAR-100 image shape
 
     # parameters for experiment setting
     'num_pick': 1,  # number of sampled task sets
@@ -67,6 +115,16 @@ params = {
     'ini_seed': 0,  # initialized seed for model, set to constant
     'require_jax_gpu': True,  # fail fast if JAX backend is not GPU
 }
+
+params = cifar100_params
+
+# Fixed deterministic CIFAR-100 binary task pairs (20 tasks, 40 classes total).
+fixed_cifar100_group_labels = jnp.array([
+    [0, 1], [2, 3], [4, 5], [6, 7], [8, 9],
+    [10, 11], [12, 13], [14, 15], [16, 17], [18, 19],
+    [20, 21], [22, 23], [24, 25], [26, 27], [28, 29],
+    [30, 31], [32, 33], [34, 35], [36, 37], [38, 39],
+])
 
 # Optional override to run a single optimizer per process, e.g.:
 # SWEEP_OPTIMIZER=adam python -u experiment/accuracy/acc_avg.py
@@ -128,8 +186,10 @@ optimizer_list = params.get('optimizer_list', [params['optimizer']])
 # Precompute fixed task splits, label mappings, and task orders so every optimizer sees the exact same data stream.
 scenarios = []
 for i in range(params['num_pick']):
+    if params['ds_type'] == 'cifar100' and params['num_task'] == 20:
+        group_labels = fixed_cifar100_group_labels
     # Fixed curriculum mode for CIFAR-10 with 3 binary tasks.
-    if params['ds_type'] == 'cifar10' and params['num_task'] == 3:
+    elif params['ds_type'] == 'cifar10' and params['num_task'] == 3:
         if params.get('task_shift_severe', False):
             # Severe shift across tasks:
             # 1) cat vs dog, 2) frog vs truck, 3) airplane vs ship
@@ -209,9 +269,26 @@ for optimizer_name in optimizer_list:
                     ['optimizer', 'learning_rate', 'sgd_momentum', 'batch_size', 'pick_index', 'seed']
                     + [f'orig_label_{k}' for k in range(n_label_cols)]
                     + [f'target_label_{k}' for k in range(n_label_cols)]
-                    + ['train_avg', 'train_min', 'train_max', 'test_avg', 'test_min', 'test_max']
+                    + [
+                        'train_loss_avg', 'train_loss_min', 'train_loss_max',
+                        'test_loss_avg', 'test_loss_min', 'test_loss_max',
+                        'train_acc_avg', 'train_acc_min', 'train_acc_max',
+                        'test_acc_avg', 'test_acc_min', 'test_acc_max',
+                    ]
                 )
                 seed_detail_rows = [seed_detail_header]
+                loss_trace_header = [
+                    'optimizer', 'learning_rate', 'sgd_momentum', 'batch_size',
+                    'pick_index', 'seed', 'order_index', 'task_index', 'epoch_index',
+                    'train_loss', 'train_accuracy', 'seen_test_loss', 'seen_test_accuracy',
+                ]
+                loss_trace_rows = [loss_trace_header]
+                continual_eval_trace_header = [
+                    'optimizer', 'learning_rate', 'sgd_momentum', 'batch_size',
+                    'pick_index', 'seed', 'order_index', 'after_task_index', 'eval_task_index',
+                    'seen_test_loss', 'seen_test_accuracy',
+                ]
+                continual_eval_trace_rows = [continual_eval_trace_header]
                 forget_seed_detail_header = (
                     ['optimizer', 'learning_rate', 'sgd_momentum', 'batch_size', 'pick_index', 'seed']
                     + [f'orig_label_{k}' for k in range(n_label_cols)]
@@ -229,6 +306,8 @@ for optimizer_name in optimizer_list:
                     target_random_labels = scenarios[i]["target_random_labels"]
                     flat_org_labels = [int(v) for pair in np.array(group_labels).tolist() for v in pair]
                     flat_target_labels = [int(v) for pair in target_random_labels for v in pair]
+                    seed_train_loss_avg_list, seed_train_loss_min_list, seed_train_loss_max_list = [], [], []
+                    seed_test_loss_avg_list, seed_test_loss_min_list, seed_test_loss_max_list = [], [], []
                     seed_train_avg_list, seed_train_min_list, seed_train_max_list = [], [], []
                     seed_test_avg_list, seed_test_min_list, seed_test_max_list = [], [], []
                     seed_forget_avg_list = []
@@ -250,9 +329,12 @@ for optimizer_name in optimizer_list:
                         )
 
                         # accuracy calculation for fixed permutation list to obtain acc_avg, min and max
-                        acc_train_avg, acc_test_avg, acc_train_perm_list, acc_test_perm_list = 0, 0, [], []
+                        loss_train_avg, loss_test_avg = 0.0, 0.0
+                        acc_train_avg, acc_test_avg = 0.0, 0.0
+                        loss_train_perm_list, loss_test_perm_list = [], []
+                        acc_train_perm_list, acc_test_perm_list = [], []
                         acc_forget_avg = 0
-                        for order in scenarios[i]["orders"]:
+                        for order_idx, order in enumerate(scenarios[i]["orders"]):
                             # reorder of dataset, labels based on task order
                             train_ds_list_ordered, test_ds_list_ordered, group_labels_ordered, target_random_labels_ordered = [], [], [], []
                             for k in range(params['num_task']):
@@ -276,14 +358,70 @@ for optimizer_name in optimizer_list:
                                 "batch_size:",
                                 params['batch_size'],
                             )
-                            train_multi_task_acc_history_list, acc_train_history, acc_test_history, acc_train_task_avg, acc_test_task_avg, acc_forget \
+                            (
+                                train_multi_task_loss_history_list,
+                                train_multi_task_acc_history_list,
+                                post_task_seen_test_loss_history,
+                                post_task_seen_test_acc_history,
+                                post_task_seen_test_loss_matrix,
+                                post_task_seen_test_acc_matrix,
+                                acc_train_history,
+                                acc_test_history,
+                                loss_train_task_avg,
+                                acc_train_task_avg,
+                                loss_test_task_avg,
+                                acc_test_task_avg,
+                                acc_forget,
+                            ) \
                                 = contin_train_with_forget(params, train_ds_list_ordered, test_ds_list_ordered, group_labels_ordered, target_random_labels_ordered)
+                            for task_idx in range(len(train_multi_task_loss_history_list)):
+                                for epoch_idx in range(len(train_multi_task_loss_history_list[task_idx])):
+                                    loss_trace_rows.append([
+                                        params['optimizer'],
+                                        float(params['learning_rate']),
+                                        float(params['sgd_momentum']),
+                                        int(params['batch_size']),
+                                        i,
+                                        int(seed_value),
+                                        int(order_idx),
+                                        int(task_idx),
+                                        int(epoch_idx),
+                                        float(train_multi_task_loss_history_list[task_idx][epoch_idx]),
+                                        float(train_multi_task_acc_history_list[task_idx][epoch_idx]),
+                                        float(post_task_seen_test_loss_history[task_idx]),
+                                        float(post_task_seen_test_acc_history[task_idx]),
+                                    ])
+                            for after_task_idx in range(len(post_task_seen_test_loss_matrix)):
+                                for eval_task_idx in range(len(post_task_seen_test_loss_matrix[after_task_idx])):
+                                    continual_eval_trace_rows.append([
+                                        params['optimizer'],
+                                        float(params['learning_rate']),
+                                        float(params['sgd_momentum']),
+                                        int(params['batch_size']),
+                                        i,
+                                        int(seed_value),
+                                        int(order_idx),
+                                        int(after_task_idx),
+                                        int(eval_task_idx),
+                                        float(post_task_seen_test_loss_matrix[after_task_idx][eval_task_idx]),
+                                        float(post_task_seen_test_acc_matrix[after_task_idx][eval_task_idx]),
+                                    ])
+                            loss_train_perm_list.append(loss_train_task_avg)
+                            loss_test_perm_list.append(loss_test_task_avg)
                             acc_train_perm_list.append(acc_train_task_avg)
                             acc_test_perm_list.append(acc_test_task_avg)
+                            loss_train_avg += loss_train_task_avg / len(scenarios[i]["orders"])
+                            loss_test_avg += loss_test_task_avg / len(scenarios[i]["orders"])
                             acc_train_avg += acc_train_task_avg / len(scenarios[i]["orders"])
                             acc_test_avg += acc_test_task_avg / len(scenarios[i]["orders"])
                             acc_forget_avg += acc_forget / len(scenarios[i]["orders"])
 
+                        seed_train_loss_avg_list.append(loss_train_avg)
+                        seed_train_loss_min_list.append(jnp.min(jnp.array(loss_train_perm_list)))
+                        seed_train_loss_max_list.append(jnp.max(jnp.array(loss_train_perm_list)))
+                        seed_test_loss_avg_list.append(loss_test_avg)
+                        seed_test_loss_min_list.append(jnp.min(jnp.array(loss_test_perm_list)))
+                        seed_test_loss_max_list.append(jnp.max(jnp.array(loss_test_perm_list)))
                         seed_train_avg_list.append(acc_train_avg)
                         seed_train_min_list.append(jnp.min(jnp.array(acc_train_perm_list)))
                         seed_train_max_list.append(jnp.max(jnp.array(acc_train_perm_list)))
@@ -296,6 +434,12 @@ for optimizer_name in optimizer_list:
                             + flat_org_labels
                             + flat_target_labels
                             + [
+                                float(loss_train_avg),
+                                float(jnp.min(jnp.array(loss_train_perm_list))),
+                                float(jnp.max(jnp.array(loss_train_perm_list))),
+                                float(loss_test_avg),
+                                float(jnp.min(jnp.array(loss_test_perm_list))),
+                                float(jnp.max(jnp.array(loss_test_perm_list))),
                                 float(acc_train_avg),
                                 float(jnp.min(jnp.array(acc_train_perm_list))),
                                 float(jnp.max(jnp.array(acc_train_perm_list))),
@@ -338,6 +482,22 @@ for optimizer_name in optimizer_list:
                 with open(seed_file_name + '.csv', mode="w", newline='') as csvfile:
                     writer = csv.writer(csvfile)
                     writer.writerows(seed_detail_rows)
+                loss_trace_file_name = (
+                    params['ds_type'] + '_' + params['nn_type'] + '_' + params['optimizer'] + '_' + 'P'
+                    + str(params['num_task']) + '_C' + str(params['num_output_classes']) + sweep_tag + '_loss_trace_index'
+                    + str(params['num_index'])
+                )
+                with open(loss_trace_file_name + '.csv', mode="w", newline='') as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerows(loss_trace_rows)
+                continual_eval_trace_file_name = (
+                    params['ds_type'] + '_' + params['nn_type'] + '_' + params['optimizer'] + '_' + 'P'
+                    + str(params['num_task']) + '_C' + str(params['num_output_classes']) + sweep_tag + '_continual_eval_trace_index'
+                    + str(params['num_index'])
+                )
+                with open(continual_eval_trace_file_name + '.csv', mode="w", newline='') as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerows(continual_eval_trace_rows)
 
                 # Forget outputs (same format as forget_avg.py), produced from the same training pass above.
                 perm_forget_avg_matrix = np.zeros((params['num_pick'], params['num_task'] * params['num_output_classes'] * 2 + 1))

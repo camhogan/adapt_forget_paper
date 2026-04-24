@@ -21,17 +21,61 @@ from continual_model import contin_learn_forget
 """
 parameters for experiment
 """
-params = {
+# Old CIFAR-10 parameter block (kept for reference, commented out).
+# params = {
+#     # parameters for model choose
+#     'ds_type': 'cifar10',  # dataset type: 'fashion_mnist', 'cifar10', 'cifar100'
+#     'nn_type': 'cnn2',  # neurowork model type: 'cnn2', 'cnn5', 'nonlinear2', 'nonlinear5'
+#     'sim_type': 'zero_shot',  # similarity calculation model type
+#
+#     # parameters for training process
+#     'num_task': 3,  # number of tasks
+#     'num_output_classes': 2,  # num of output classes
+#     'num_all_classes': 10,  # num of total classes in dataset (ex. 100 for cifar100)
+#     'task_shift_severe': True,  # False: similar task structure, True: dramatic task shifts
+#     'optimizer': 'adam',  # optimizer: 'sgd', 'sgd_momentum', 'adam', 'adamw', 'rmsprop'
+#     'optimizer_list': ['sgd', 'sgd_momentum', 'adam', 'adamw', 'rmsprop'],  # list of optimizers to compare in one run
+#     'learning_rate': 0.001,  # learning rate
+#     'sgd_momentum': 0.9,  # used by sgd_momentum
+#     'sgd_nesterov': False,  # used by sgd_momentum
+#     'adam_b1': 0.9,  # used by adam
+#     'adam_b2': 0.999,  # used by adam
+#     'adam_eps': 1e-8,  # used by adam
+#     'adamw_b1': 0.9,  # used by adamw
+#     'adamw_b2': 0.999,  # used by adamw
+#     'adamw_eps': 1e-8,  # used by adamw
+#     'adamw_weight_decay': 1e-4,  # used by adamw
+#     'rmsprop_decay': 0.9,  # used by rmsprop
+#     'rmsprop_eps': 1e-8,  # used by rmsprop
+#     'rmsprop_initial_scale': 0.0,  # used by rmsprop
+#     'rmsprop_centered': False,  # used by rmsprop
+#     'rmsprop_momentum': 0.0,  # used by rmsprop
+#     'rmsprop_nesterov': False,  # used by rmsprop
+#     'num_regular_epochs': 5,  # number of epochs per task during regular training
+#     'num_continue_epochs': 5,  # number of epochs per task during continue training
+#     'batch_size': 4,   # batch size
+#     'shuffle_size': 1000,  # shuffle size
+#     'image_size': [32, 32, 3],  # size of image data, [28, 28, 1] for grayscale image, [32, 32, 3] for colored ones
+#
+#     # parameters for experiment setting
+#     'num_pick': 1,  # number of sampled task sets
+#     'num_perm': 1,  # number of multi-permutations for each sample point: 6, 30, 50 for P = 3, 5, 7
+#     'num_seeds': 10,  # number of random seeds to average over
+#     'num_index': 1,  # job index to submit, related to classes split and labels split
+#     'ini_seed': 0,  # initialized seed for model, set to constant
+# }
+
+cifar100_params = {
     # parameters for model choose
-    'ds_type': 'cifar10',  # dataset type: 'fashion_mnist', 'cifar10', 'cifar100'
+    'ds_type': 'cifar100',  # dataset type: 'fashion_mnist', 'cifar10', 'cifar100'
     'nn_type': 'cnn2',  # neurowork model type: 'cnn2', 'cnn5', 'nonlinear2', 'nonlinear5'
     'sim_type': 'zero_shot',  # similarity calculation model type
 
     # parameters for training process
-    'num_task': 3,  # number of tasks
-    'num_output_classes': 2,  # num of output classes
-    'num_all_classes': 10,  # num of total classes in dataset (ex. 100 for cifar100)
-    'task_shift_severe': True,  # False: similar task structure, True: dramatic task shifts
+    'num_task': 20,  # number of binary tasks (20 pairs)
+    'num_output_classes': 2,  # num of output classes (binary tasks)
+    'num_all_classes': 100,  # num of total classes in dataset
+    'task_shift_severe': True,  # only used by hardcoded CIFAR-10 branch
     'optimizer': 'adam',  # optimizer: 'sgd', 'sgd_momentum', 'adam', 'adamw', 'rmsprop'
     'optimizer_list': ['sgd', 'sgd_momentum', 'adam', 'adamw', 'rmsprop'],  # list of optimizers to compare in one run
     'learning_rate': 0.001,  # learning rate
@@ -50,11 +94,11 @@ params = {
     'rmsprop_centered': False,  # used by rmsprop
     'rmsprop_momentum': 0.0,  # used by rmsprop
     'rmsprop_nesterov': False,  # used by rmsprop
-    'num_regular_epochs': 5,  # number of epochs per task during regular training
-    'num_continue_epochs': 5,  # number of epochs per task during continue training
+    'num_regular_epochs': 1,  # number of epochs per task during regular training
+    'num_continue_epochs': 1,  # number of epochs per task during continue training
     'batch_size': 4,   # batch size
     'shuffle_size': 1000,  # shuffle size
-    'image_size': [32, 32, 3],  # size of image data, [28, 28, 1] for grayscale image, [32, 32, 3] for colored ones
+    'image_size': [32, 32, 3],  # CIFAR-100 image shape
 
     # parameters for experiment setting
     'num_pick': 1,  # number of sampled task sets
@@ -63,6 +107,16 @@ params = {
     'num_index': 1,  # job index to submit, related to classes split and labels split
     'ini_seed': 0,  # initialized seed for model, set to constant
 }
+
+params = cifar100_params
+
+# Fixed deterministic CIFAR-100 binary task pairs (20 tasks, 40 classes total).
+fixed_cifar100_group_labels = jnp.array([
+    [0, 1], [2, 3], [4, 5], [6, 7], [8, 9],
+    [10, 11], [12, 13], [14, 15], [16, 17], [18, 19],
+    [20, 21], [22, 23], [24, 25], [26, 27], [28, 29],
+    [30, 31], [32, 33], [34, 35], [36, 37], [38, 39],
+])
 
 ###############################################################################################################
 """
@@ -94,7 +148,7 @@ random.seed(params['ini_seed'])
 np.random.seed(params['ini_seed'])
 tf.random.set_seed(params['ini_seed'])
 
-# Load the CIFAR-10 dataset using tensorflow_datasets
+# Load dataset using tensorflow_datasets
 # Use a dedicated TFDS cache for forget runs so accuracy/forget jobs can run concurrently.
 data_dir = '/tmp/tfds_forget'
 train_ds, test_ds = ds_upload(data_dir, params['ds_type'])
@@ -104,8 +158,10 @@ optimizer_list = params.get('optimizer_list', [params['optimizer']])
 # Precompute fixed task splits, label mappings, and task orders so every optimizer sees the exact same data stream.
 scenarios = []
 for i in range(params['num_pick']):
+    if params['ds_type'] == 'cifar100' and params['num_task'] == 20:
+        group_labels = fixed_cifar100_group_labels
     # Fixed curriculum mode for CIFAR-10 with 3 binary tasks.
-    if params['ds_type'] == 'cifar10' and params['num_task'] == 3:
+    elif params['ds_type'] == 'cifar10' and params['num_task'] == 3:
         if params.get('task_shift_severe', False):
             # Severe shift across tasks:
             # 1) cat vs dog, 2) frog vs truck, 3) airplane vs ship

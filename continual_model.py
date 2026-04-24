@@ -63,7 +63,6 @@ def apply_model(state, images, labels):
     def loss_fn(params):
         """cross-entropy loss function"""
         logits_model = state.apply_fn(params, images)
-        print(logits_model.shape[1])
         one_hot = nn.one_hot(labels, logits_model.shape[1])
         loss_model = jnp.mean(optax.softmax_cross_entropy(logits=logits_model, labels=one_hot))
         return loss_model, logits_model
@@ -142,7 +141,10 @@ def train_model(state, train_data_loader, num_epochs, train_group_label, random_
         loss_history.append(train_loss)
         accuracy_history.append(train_accuracy)
         if index == num_epochs:
-            print(f'epoch: {epoch:03d}, train loss: {train_loss:.4f}, train accuracy: {train_accuracy:.4f}')
+            print(
+                f'epoch: {epoch:03d}, train loss: {float(train_loss):.4f}, '
+                f'train accuracy: {float(train_accuracy):.4f}'
+            )
     return state, loss_history, accuracy_history
 
 
@@ -237,7 +239,12 @@ def contin_train_with_forget(const_params, train_ds_list_ordered, test_ds_list_o
     )
     model_state = train_state.TrainState.create(apply_fn=model.apply, params=model_params, tx=optimizer)
 
+    train_multi_task_loss_history_list = []
     train_multi_task_acc_history_list = []
+    post_task_seen_test_loss_history = []
+    post_task_seen_test_acc_history = []
+    post_task_seen_test_loss_matrix = []
+    post_task_seen_test_acc_matrix = []
     model_state_list = []
     print("continual training acc history report for specific order:")
     for i in range(const_params['num_task']):
@@ -250,7 +257,31 @@ def contin_train_with_forget(const_params, train_ds_list_ordered, test_ds_list_o
             const_params['num_output_classes'],
         )
         model_state_list.append(model_state)
+        train_multi_task_loss_history_list.append(loss_history)
         train_multi_task_acc_history_list.append(accuracy_history)
+        seen_loss_row = []
+        seen_acc_row = []
+        seen_loss_mean, seen_acc_mean = 0.0, 0.0
+        for seen_i in range(i + 1):
+            seen_loss, seen_acc = test_model(
+                model_state,
+                test_ds_list_ordered[seen_i],
+                group_labels_ordered[seen_i],
+                random_labels_ordered[seen_i],
+                const_params['num_output_classes'],
+            )
+            seen_loss_row.append(float(seen_loss))
+            seen_acc_row.append(float(seen_acc))
+            seen_loss_mean += float(seen_loss) / (i + 1)
+            seen_acc_mean += float(seen_acc) / (i + 1)
+        post_task_seen_test_loss_matrix.append(seen_loss_row)
+        post_task_seen_test_acc_matrix.append(seen_acc_row)
+        post_task_seen_test_loss_history.append(seen_loss_mean)
+        post_task_seen_test_acc_history.append(seen_acc_mean)
+        print(
+            f'post-task {i+1:03d}/{const_params["num_task"]:03d}, '
+            f'seen-test loss: {seen_loss_mean:.4f}, seen-test acc: {seen_acc_mean:.4f}'
+        )
 
     acc_train_list, loss_train_mean, acc_train_mean = [], 0, 0
     for i in range(const_params['num_task']):
@@ -297,10 +328,17 @@ def contin_train_with_forget(const_params, train_ds_list_ordered, test_ds_list_o
         acc_test_forget_mean += (acc_task_i - acc_final) / (const_params['num_task'] - 1)
 
     return (
+        train_multi_task_loss_history_list,
         train_multi_task_acc_history_list,
+        post_task_seen_test_loss_history,
+        post_task_seen_test_acc_history,
+        post_task_seen_test_loss_matrix,
+        post_task_seen_test_acc_matrix,
         acc_train_list,
         acc_test_list,
+        loss_train_mean,
         acc_train_mean,
+        loss_test_mean,
         acc_test_mean,
         acc_test_forget_mean,
     )
