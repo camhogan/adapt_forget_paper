@@ -77,7 +77,7 @@ cifar100_params = {
     'sim_type': 'zero_shot',  # similarity calculation model type: zero_short, -ghg
 
     # parameters for training process
-    'num_task': 3,  # temporary smoke test: only 3 binary tasks
+    'num_task': 50,  # number of binary tasks (all 50 pairs from CIFAR-100)
     'num_output_classes': 2,  # num of output classes (binary tasks)
     'num_all_classes': 100,  # total classes in CIFAR-100
     'task_shift_severe': True,  # only used by hardcoded CIFAR-10 branch
@@ -104,7 +104,7 @@ cifar100_params = {
     'num_regular_epochs': 1,  # number of epochs per task during regular training
     'num_continue_epochs': 1,  # number of epochs per task during continue training
     'batch_size': 64,   # default batch size
-    'batch_size_list': [64],  # temporary smoke test: first batch size only
+    'batch_size_list': [128, 256],  # sweep list for batch size
     'shuffle_size': 1000,  # shuffle size
     'image_size': [32, 32, 3],  # CIFAR-100 image shape
 
