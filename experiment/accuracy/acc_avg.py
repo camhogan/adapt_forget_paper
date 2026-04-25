@@ -83,7 +83,7 @@ cifar100_params = {
     'optimizer': 'adam',  # optimizer: 'sgd', 'sgd_momentum', 'adam', 'adamw', 'rmsprop'
     'optimizer_list': ['adam', 'sgd', 'sgd_momentum'],  # list of optimizers to compare in one run
     'learning_rate': 0.001,  # default learning rate
-    'learning_rate_list': [0.0003, 0.001, 0.003, 0.01, 0.1],  # sweep list for learning rate
+    'learning_rate_list': [0.0003, 0.001, 0.01, 0.1],  # sweep list for learning rate
     'sgd_momentum': 0.9,  # default used by sgd_momentum
     'sgd_momentum_list': [0.9, 0.95],  # sweep list for sgd_momentum
     'sgd_nesterov': False,  # used by sgd_momentum
