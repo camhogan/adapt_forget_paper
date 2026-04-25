@@ -76,7 +76,7 @@ cifar100_params = {
     'sim_type': 'zero_shot',  # similarity calculation model type: zero_short, -ghg
 
     # parameters for training process
-    'num_task': 20,  # number of binary tasks (20 pairs)
+    'num_task': 50,  # number of binary tasks (all 50 pairs from CIFAR-100)
     'num_output_classes': 2,  # num of output classes (binary tasks)
     'num_all_classes': 100,  # total classes in CIFAR-100
     'task_shift_severe': True,  # only used by hardcoded CIFAR-10 branch
@@ -85,7 +85,7 @@ cifar100_params = {
     'learning_rate': 0.001,  # default learning rate
     'learning_rate_list': [0.0003, 0.001, 0.003, 0.01, 0.1],  # sweep list for learning rate
     'sgd_momentum': 0.9,  # default used by sgd_momentum
-    'sgd_momentum_list': [0.8, 0.9, 0.95],  # sweep list for sgd_momentum
+    'sgd_momentum_list': [0.9, 0.95],  # sweep list for sgd_momentum
     'sgd_nesterov': False,  # used by sgd_momentum
     'adam_b1': 0.9,  # used by adam
     'adam_b2': 0.999,  # used by adam
@@ -118,13 +118,9 @@ cifar100_params = {
 
 params = cifar100_params
 
-# Fixed deterministic CIFAR-100 binary task pairs (20 tasks, 40 classes total).
-fixed_cifar100_group_labels = jnp.array([
-    [0, 1], [2, 3], [4, 5], [6, 7], [8, 9],
-    [10, 11], [12, 13], [14, 15], [16, 17], [18, 19],
-    [20, 21], [22, 23], [24, 25], [26, 27], [28, 29],
-    [30, 31], [32, 33], [34, 35], [36, 37], [38, 39],
-])
+# Fixed deterministic CIFAR-100 binary task pairs (all 50 pairs, fixed order).
+fixed_cifar100_group_labels = jnp.arange(100).reshape((50, 2))
+fixed_cifar100_task_order = np.arange(50)
 
 # Optional override to run a single optimizer per process, e.g.:
 # SWEEP_OPTIMIZER=adam python -u experiment/accuracy/acc_avg.py
@@ -186,7 +182,7 @@ optimizer_list = params.get('optimizer_list', [params['optimizer']])
 # Precompute fixed task splits, label mappings, and task orders so every optimizer sees the exact same data stream.
 scenarios = []
 for i in range(params['num_pick']):
-    if params['ds_type'] == 'cifar100' and params['num_task'] == 20:
+    if params['ds_type'] == 'cifar100' and params['num_task'] == 50:
         group_labels = fixed_cifar100_group_labels
     # Fixed curriculum mode for CIFAR-10 with 3 binary tasks.
     elif params['ds_type'] == 'cifar10' and params['num_task'] == 3:
@@ -216,7 +212,9 @@ for i in range(params['num_pick']):
         label_perm = jax.random.permutation(key_label, jnp.arange(params['num_output_classes']))
         target_random_labels.append(tuple(np.array(label_perm).tolist()))
 
-    if params['ds_type'] == 'cifar10' and params['num_task'] == 3:
+    if params['ds_type'] == 'cifar100' and params['num_task'] == 50:
+        orders = [fixed_cifar100_task_order]
+    elif params['ds_type'] == 'cifar10' and params['num_task'] == 3:
         # Keep a fixed switch sequence for severe vs non-severe comparisons.
         orders = [np.array([0, 1, 2])]
     elif params['num_task'] == 3:
