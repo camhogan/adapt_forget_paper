@@ -7,6 +7,7 @@ import time
 import os
 import sys
 import random
+import subprocess
 
 # import function from specific path, where stores modules
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -76,16 +77,16 @@ cifar100_params = {
     'sim_type': 'zero_shot',  # similarity calculation model type: zero_short, -ghg
 
     # parameters for training process
-    'num_task': 50,  # number of binary tasks (all 50 pairs from CIFAR-100)
+    'num_task': 3,  # temporary smoke test: only 3 binary tasks
     'num_output_classes': 2,  # num of output classes (binary tasks)
     'num_all_classes': 100,  # total classes in CIFAR-100
     'task_shift_severe': True,  # only used by hardcoded CIFAR-10 branch
     'optimizer': 'adam',  # optimizer: 'sgd', 'sgd_momentum', 'adam', 'adamw', 'rmsprop'
     'optimizer_list': ['adam', 'sgd', 'sgd_momentum'],  # list of optimizers to compare in one run
     'learning_rate': 0.001,  # default learning rate
-    'learning_rate_list': [0.0003, 0.001, 0.01, 0.1],  # sweep list for learning rate
+    'learning_rate_list': [0.0003],  # temporary smoke test: first learning rate only
     'sgd_momentum': 0.9,  # default used by sgd_momentum
-    'sgd_momentum_list': [0.9, 0.95],  # sweep list for sgd_momentum
+    'sgd_momentum_list': [0.9],  # temporary smoke test: first sgd momentum only
     'sgd_nesterov': False,  # used by sgd_momentum
     'adam_b1': 0.9,  # used by adam
     'adam_b2': 0.999,  # used by adam
@@ -103,7 +104,7 @@ cifar100_params = {
     'num_regular_epochs': 1,  # number of epochs per task during regular training
     'num_continue_epochs': 1,  # number of epochs per task during continue training
     'batch_size': 64,   # default batch size
-    'batch_size_list': [64, 128],  # sweep list for batch size
+    'batch_size_list': [64],  # temporary smoke test: first batch size only
     'shuffle_size': 1000,  # shuffle size
     'image_size': [32, 32, 3],  # CIFAR-100 image shape
 
@@ -121,6 +122,14 @@ params = cifar100_params
 # Fixed deterministic CIFAR-100 binary task pairs (all 50 pairs, fixed order).
 fixed_cifar100_group_labels = jnp.arange(100).reshape((50, 2))
 fixed_cifar100_task_order = np.arange(50)
+
+# Optional override for quick smoke tests without editing code:
+# NUM_TASK_OVERRIDE=3 python -u experiment/accuracy/acc_avg.py
+num_task_override = os.getenv("NUM_TASK_OVERRIDE")
+if num_task_override:
+    params['num_task'] = int(num_task_override)
+fixed_cifar100_smoke_group_labels = fixed_cifar100_group_labels[:3]
+fixed_cifar100_smoke_task_order = np.arange(3)
 
 # Optional override to run a single optimizer per process, e.g.:
 # SWEEP_OPTIMIZER=adam python -u experiment/accuracy/acc_avg.py
@@ -182,8 +191,10 @@ optimizer_list = params.get('optimizer_list', [params['optimizer']])
 # Precompute fixed task splits, label mappings, and task orders so every optimizer sees the exact same data stream.
 scenarios = []
 for i in range(params['num_pick']):
-    if params['ds_type'] == 'cifar100' and params['num_task'] == 50:
-        group_labels = fixed_cifar100_group_labels
+    if params['ds_type'] == 'cifar100' and params['num_task'] <= 50:
+        group_labels = fixed_cifar100_group_labels[:params['num_task']]
+    elif params['ds_type'] == 'cifar100' and params['num_task'] == 3:
+        group_labels = fixed_cifar100_smoke_group_labels
     # Fixed curriculum mode for CIFAR-10 with 3 binary tasks.
     elif params['ds_type'] == 'cifar10' and params['num_task'] == 3:
         if params.get('task_shift_severe', False):
@@ -212,8 +223,10 @@ for i in range(params['num_pick']):
         label_perm = jax.random.permutation(key_label, jnp.arange(params['num_output_classes']))
         target_random_labels.append(tuple(np.array(label_perm).tolist()))
 
-    if params['ds_type'] == 'cifar100' and params['num_task'] == 50:
-        orders = [fixed_cifar100_task_order]
+    if params['ds_type'] == 'cifar100' and params['num_task'] <= 50:
+        orders = [fixed_cifar100_task_order[:params['num_task']]]
+    elif params['ds_type'] == 'cifar100' and params['num_task'] == 3:
+        orders = [fixed_cifar100_smoke_task_order]
     elif params['ds_type'] == 'cifar10' and params['num_task'] == 3:
         # Keep a fixed switch sequence for severe vs non-severe comparisons.
         orders = [np.array([0, 1, 2])]
@@ -496,6 +509,22 @@ for optimizer_name in optimizer_list:
                 with open(continual_eval_trace_file_name + '.csv', mode="w", newline='') as csvfile:
                     writer = csv.writer(csvfile)
                     writer.writerows(continual_eval_trace_rows)
+
+                # Auto-generate plots for this completed run/configuration.
+                plot_script = os.path.join(parent_dir, 'plot_optimizer_trace.py')
+                plot_cmd = [
+                    sys.executable,
+                    plot_script,
+                    '--results-dir', '.',
+                    '--optimizer', params['optimizer'],
+                    '--learning-rate', str(params['learning_rate']),
+                    '--batch-size', str(params['batch_size']),
+                    '--output-dir', 'plots',
+                ]
+                if params['optimizer'] == 'sgd_momentum':
+                    plot_cmd.extend(['--momentum', str(params['sgd_momentum'])])
+                print('auto-plot cmd:', ' '.join(plot_cmd))
+                subprocess.run(plot_cmd, check=False)
 
                 # Forget outputs (same format as forget_avg.py), produced from the same training pass above.
                 perm_forget_avg_matrix = np.zeros((params['num_pick'], params['num_task'] * params['num_output_classes'] * 2 + 1))

@@ -114,6 +114,12 @@ params = cifar100_params
 fixed_cifar100_group_labels = jnp.arange(100).reshape((50, 2))
 fixed_cifar100_task_order = np.arange(50)
 
+# Optional override for quick smoke tests without editing code:
+# NUM_TASK_OVERRIDE=3 python -u experiment/forget/forget_avg.py
+num_task_override = os.getenv("NUM_TASK_OVERRIDE")
+if num_task_override:
+    params['num_task'] = int(num_task_override)
+
 ###############################################################################################################
 """
 pre-allocation and initialization of parameters, default and no need to change in general case 
@@ -154,8 +160,8 @@ optimizer_list = params.get('optimizer_list', [params['optimizer']])
 # Precompute fixed task splits, label mappings, and task orders so every optimizer sees the exact same data stream.
 scenarios = []
 for i in range(params['num_pick']):
-    if params['ds_type'] == 'cifar100' and params['num_task'] == 50:
-        group_labels = fixed_cifar100_group_labels
+    if params['ds_type'] == 'cifar100' and params['num_task'] <= 50:
+        group_labels = fixed_cifar100_group_labels[:params['num_task']]
     # Fixed curriculum mode for CIFAR-10 with 3 binary tasks.
     elif params['ds_type'] == 'cifar10' and params['num_task'] == 3:
         if params.get('task_shift_severe', False):
@@ -184,8 +190,8 @@ for i in range(params['num_pick']):
         label_perm = jax.random.permutation(key_label, np.arange(params['num_output_classes']))
         target_random_labels.append(tuple(np.array(label_perm).tolist()))
 
-    if params['ds_type'] == 'cifar100' and params['num_task'] == 50:
-        orders = [fixed_cifar100_task_order]
+    if params['ds_type'] == 'cifar100' and params['num_task'] <= 50:
+        orders = [fixed_cifar100_task_order[:params['num_task']]]
     elif params['ds_type'] == 'cifar10' and params['num_task'] == 3:
         # Keep a fixed switch sequence for severe vs non-severe comparisons.
         orders = [np.array([0, 1, 2])]
