@@ -114,12 +114,6 @@ params = cifar100_params
 fixed_cifar100_group_labels = jnp.arange(100).reshape((50, 2))
 fixed_cifar100_task_order = np.arange(50)
 
-# Optional override for quick smoke tests without editing code:
-# NUM_TASK_OVERRIDE=3 python -u experiment/forget/forget_avg.py
-num_task_override = os.getenv("NUM_TASK_OVERRIDE")
-if num_task_override:
-    params['num_task'] = int(num_task_override)
-
 ###############################################################################################################
 """
 pre-allocation and initialization of parameters, default and no need to change in general case 

@@ -22,54 +22,6 @@ from continual_model import contin_train_with_forget
 """
 parameters for experiment
 """
-# Old CIFAR-10 parameter block (kept for reference, commented out).
-# params = {
-#     # parameters for model choose
-#     'ds_type': 'cifar10',  # dataset type: 'fashion_mnist', 'cifar10', 'cifar100'
-#     'nn_type': 'cnn2',  # neurowork model type: 'cnn2', 'cnn5', 'nonlinear2', 'nonlinear5'
-#     'sim_type': 'zero_shot',  # similarity calculation model type: zero_short, -ghg
-#
-#     # parameters for training process
-#     'num_task': 3,  # number of tasks
-#     'num_output_classes': 2,  # num of output classes
-#     'num_all_classes': 10,  # num of total classes in dataset (ex. 100 for cifar100)
-#     'task_shift_severe': True,  # False: similar task structure, True: dramatic task shifts
-#     'optimizer': 'adam',  # optimizer: 'sgd', 'sgd_momentum', 'adam', 'adamw', 'rmsprop'
-#     'optimizer_list': ['adam', 'sgd', 'sgd_momentum'],  # list of optimizers to compare in one run
-#     'learning_rate': 0.001,  # default learning rate
-#     'learning_rate_list': [0.0003, 0.001, 0.003, 0.01, 0.1],  # sweep list for learning rate
-#     'sgd_momentum': 0.9,  # default used by sgd_momentum
-#     'sgd_momentum_list': [0.8, 0.9, 0.95],  # sweep list for sgd_momentum
-#     'sgd_nesterov': False,  # used by sgd_momentum
-#     'adam_b1': 0.9,  # used by adam
-#     'adam_b2': 0.999,  # used by adam
-#     'adam_eps': 1e-8,  # used by adam
-#     'adamw_b1': 0.9,  # used by adamw
-#     'adamw_b2': 0.999,  # used by adamw
-#     'adamw_eps': 1e-8,  # used by adamw
-#     'adamw_weight_decay': 1e-4,  # used by adamw
-#     'rmsprop_decay': 0.9,  # used by rmsprop
-#     'rmsprop_eps': 1e-8,  # used by rmsprop
-#     'rmsprop_initial_scale': 0.0,  # used by rmsprop
-#     'rmsprop_centered': False,  # used by rmsprop
-#     'rmsprop_momentum': 0.0,  # used by rmsprop
-#     'rmsprop_nesterov': False,  # used by rmsprop
-#     'num_regular_epochs': 5,  # number of epochs per task during regular training
-#     'num_continue_epochs': 5,  # number of epochs per task during continue training
-#     'batch_size': 64,   # default batch size
-#     'batch_size_list': [64, 128],  # sweep list for batch size
-#     'shuffle_size': 1000,  # shuffle size
-#     'image_size': [32, 32, 3],  # size of image data, [28, 28, 1] for grayscale image, [32, 32, 3] for colored ones
-#
-#     # parameters for experiment setting
-#     'num_pick': 1,  # number of sampled task sets
-#     'num_perm': 1,  # number of multi-permutations for each sample point: 6, 30, 50 for P = 3, 5, 7
-#     'num_seeds': 10,  # number of random seeds to average over
-#     'num_index': 1,  # job index to submit, related to classes split and labels split
-#     'ini_seed': 0,  # initialized seed for model, set to constant
-#     'require_jax_gpu': True,  # fail fast if JAX backend is not GPU
-# }
-
 cifar100_params = {
     # parameters for model choose
     'ds_type': 'cifar100',  # dataset type: 'fashion_mnist', 'cifar10', 'cifar100'
@@ -103,7 +55,7 @@ cifar100_params = {
     'rmsprop_nesterov': False,  # used by rmsprop
     'num_regular_epochs': 1,  # number of epochs per task during regular training
     'num_continue_epochs': 1,  # number of epochs per task during continue training
-    'batch_size': 64,   # default batch size
+    'batch_size': 128,   # default batch size
     'batch_size_list': [128, 256],  # sweep list for batch size
     'shuffle_size': 1000,  # shuffle size
     'image_size': [32, 32, 3],  # CIFAR-100 image shape
@@ -122,14 +74,6 @@ params = cifar100_params
 # Fixed deterministic CIFAR-100 binary task pairs (all 50 pairs, fixed order).
 fixed_cifar100_group_labels = jnp.arange(100).reshape((50, 2))
 fixed_cifar100_task_order = np.arange(50)
-
-# Optional override for quick smoke tests without editing code:
-# NUM_TASK_OVERRIDE=3 python -u experiment/accuracy/acc_avg.py
-num_task_override = os.getenv("NUM_TASK_OVERRIDE")
-if num_task_override:
-    params['num_task'] = int(num_task_override)
-fixed_cifar100_smoke_group_labels = fixed_cifar100_group_labels[:3]
-fixed_cifar100_smoke_task_order = np.arange(3)
 
 # Optional override to run a single optimizer per process, e.g.:
 # SWEEP_OPTIMIZER=adam python -u experiment/accuracy/acc_avg.py
@@ -193,8 +137,6 @@ scenarios = []
 for i in range(params['num_pick']):
     if params['ds_type'] == 'cifar100' and params['num_task'] <= 50:
         group_labels = fixed_cifar100_group_labels[:params['num_task']]
-    elif params['ds_type'] == 'cifar100' and params['num_task'] == 3:
-        group_labels = fixed_cifar100_smoke_group_labels
     # Fixed curriculum mode for CIFAR-10 with 3 binary tasks.
     elif params['ds_type'] == 'cifar10' and params['num_task'] == 3:
         if params.get('task_shift_severe', False):
@@ -225,8 +167,6 @@ for i in range(params['num_pick']):
 
     if params['ds_type'] == 'cifar100' and params['num_task'] <= 50:
         orders = [fixed_cifar100_task_order[:params['num_task']]]
-    elif params['ds_type'] == 'cifar100' and params['num_task'] == 3:
-        orders = [fixed_cifar100_smoke_task_order]
     elif params['ds_type'] == 'cifar10' and params['num_task'] == 3:
         # Keep a fixed switch sequence for severe vs non-severe comparisons.
         orders = [np.array([0, 1, 2])]
